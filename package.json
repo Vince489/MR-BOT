@@ -1,0 +1,26 @@
+{
+  "name": "mr-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "Agent.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@mistralai/mistralai": "^1.14.0",
+    "cheerio": "^1.2.0",
+    "chrono-node": "^2.9.0",
+    "countries-and-timezones": "^3.8.0",
+    "dotenv": "^17.3.1",
+    "js-tiktoken": "^1.0.21",
+    "luxon": "^3.7.2",
+    "mathjs": "^15.1.1",
+    "mongoose": "^9.3.1",
+    "open": "^11.0.0",
+    "playwright": "^1.58.2"
+  }
+}
