@@ -176,7 +176,7 @@ function clearMemory() {
 export const calculatorTool = {
   type: "function",
   function: {
-    name: 'calculator',
+    name: 'calculator_tool',
     description: 'Evaluates mathematical expressions using mathjs. Supports arithmetic, trigonometry, logarithms, unit conversions, rounding, and calculator memory operations.',
     parameters: {
       type: 'object',

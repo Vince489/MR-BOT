@@ -104,13 +104,6 @@ export const thoughtTool = {
       metadata = {}
     } = params;
 
-    console.log(`🧠 [THOUGHT TOOL] Recording Step: ${step}`);
-    console.log(`   | Hypothesis: ${hypothesis}`);
-    console.log(`   | Plan: ${plan.join(' -> ')}`);
-    
-    if (uncertainties.length > 0) {
-      console.log(`   | Uncertainties: ${uncertainties.length} items`);
-    }
 
     try {
       // 1. Validation
