@@ -75,8 +75,7 @@ export class ResponseProcessor {
       return {
         role: "tool",
         content: JSON.stringify({ status: "error", message: "Invalid tool call structure" }),
-        // Mistral SDK v1.x outbound schema expects camelCase: toolCallId
-        toolCallId: toolCall?.id || "unknown"
+        toolCallId: toolCall.id
       };
     }
 
