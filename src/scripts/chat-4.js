@@ -173,13 +173,12 @@ async function main() {
     try {
       process.stdout.write('\n🤖 Assistant: ');
 
-      // Use non-streaming execution here because Mistral tool-call continuation
-      // can return invalid_request_message_order in stream follow-ups.
-      const result = await agent.execute(messages, trimmed);
-
-      if (typeof result?.response === 'string') {
-        process.stdout.write(result.response);
-      }
+      // Use streaming execution to provide real-time responses
+      const result = await agent.executeStream(messages, trimmed, (chunk) => {
+        if (typeof chunk === 'string') {
+          process.stdout.write(chunk);
+        }
+      });
 
       process.stdout.write('\n');
 
