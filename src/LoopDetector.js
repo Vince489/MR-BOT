@@ -11,7 +11,7 @@ export class LoopDetector {
    */
   constructor(config = {}) {
     this.recentToolCalls = [];
-    this.MAX_RECENT_CALLS = config.maxRecentCalls || 3;
+    this.maxRecentCalls = config.maxRecentCalls || 3;
     this.loopThreshold = config.loopThreshold || 2;
     this.enablePatternDetection = config.enablePatternDetection !== false;
   }
@@ -71,7 +71,7 @@ export class LoopDetector {
   _detectComplexLoop(toolCalls) {
     if (toolCalls.length === 0) return false;
 
-    const recentCalls = this.recentToolCalls.slice(0, this.MAX_RECENT_CALLS * 2);
+    const recentCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
     if (recentCalls.length >= 4) {
       const pattern = recentCalls.slice(0, 2);
       const nextPattern = recentCalls.slice(2, 4);
@@ -100,8 +100,8 @@ export class LoopDetector {
     this.recentToolCalls.unshift(...newCalls);
 
     // Keep only the most recent calls
-    if (this.recentToolCalls.length > this.MAX_RECENT_CALLS * 2) {
-      this.recentToolCalls = this.recentToolCalls.slice(0, this.MAX_RECENT_CALLS * 2);
+    if (this.recentToolCalls.length > this.maxRecentCalls * 2) {
+      this.recentToolCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
     }
   }
 }

@@ -3,7 +3,7 @@
  * Defines token limits for different Mistral models
  */
 
-export const MODEL_LIMITS = {
+export const modelLimits = {
   // Your specified models
   'mistral-medium-2505': 131072,
   'mistral-medium-2508': 131072,
@@ -28,22 +28,13 @@ export const MODEL_LIMITS = {
  * @returns {number} - The token limit for the model
  */
 export function getModelLimit(modelName) {
-  return MODEL_LIMITS[modelName] || 32768;
+  return modelLimits[modelName] || 32768;
 }
 
-/**
- * Get all available models
- * @returns {Array<string>} - Array of available model names
- */
 export function getAvailableModels() {
-  return Object.keys(MODEL_LIMITS);
+  return Object.keys(modelLimits);
 }
 
-/**
- * Check if a model is supported
- * @param {string} modelName - The name of the model to check
- * @returns {boolean} - True if the model is supported
- */
 export function isModelSupported(modelName) {
-  return modelName in MODEL_LIMITS;
+  return modelName in modelLimits;
 }

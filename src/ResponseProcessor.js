@@ -46,6 +46,35 @@ export class ResponseProcessor {
   }
 
   /**
+   * Validates that a tool result message uses camelCase format.
+   * Throws an error if snake_case is detected, enforcing strict camelCase.
+   * @param {Object} toolResult - Tool result message to validate
+   * @param {string} toolName - Name of the tool for error context
+   * @throws {Error} - If snake_case is detected in the tool result
+   */
+  validateToolResultFormat(toolResult, toolName) {
+    if (!toolResult || typeof toolResult !== 'object') {
+      return; // Skip validation for non-object results
+    }
+
+    // Check for snake_case toolCallId
+    if (toolResult.toolCallId) {
+      throw new Error(
+        `[CRITICAL ARCHITECTURAL ERROR]: Tool "${toolName}" returned 'tool_call_id'. ` +
+        `The system requires 'toolCallId' (camelCase). Please update your tool handler definition.`
+      );
+    }
+
+    // Check that camelCase toolCallId is present
+    if (!toolResult.toolCallId) {
+      throw new Error(
+        `[CRITICAL ARCHITECTURAL ERROR]: Tool "${toolName}" missing required 'toolCallId'. ` +
+        `Tool results must include a camelCase toolCallId field.`
+      );
+    }
+  }
+
+  /**
    * Intercepts and removes meta-arguments (like taskProgress) before validation.
    * @param {Object} args - Raw arguments from the LLM
    * @returns {{ cleanArgs: Object, meta: Object }}
@@ -289,7 +318,7 @@ export class ResponseProcessor {
           response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
           fullMessages: currentMessages,
           rounds: round,
-          status: "context_overflow"
+          status: "contextOverflow"
         };
       }
 
@@ -300,7 +329,7 @@ export class ResponseProcessor {
           response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
           fullMessages: currentMessages,
           rounds: round,
-          status: "max_rounds"
+          status: "maxRounds"
         };
       }
 
@@ -327,7 +356,7 @@ export class ResponseProcessor {
           response: "Loop detected: Agent stopped to prevent infinite recursion.",
           fullMessages: currentMessages,
           rounds: round,
-          status: "loop_detected"
+          status: "loopDetected"
         };
       }
 
@@ -345,7 +374,7 @@ export class ResponseProcessor {
       response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
       fullMessages: currentMessages,
       rounds: maxRounds,
-      status: "max_rounds"
+          status: "maxRounds"
     };
   }
 
@@ -441,12 +470,12 @@ export class ResponseProcessor {
 
       // Termination 2: Hard Stop
       if (!this._hasRoomForNextRound(currentMessages)) {
-        return { response: "Context limit reached.", fullMessages: currentMessages, rounds: round, status: "context_overflow" };
+        return { response: "Context limit reached.", fullMessages: currentMessages, rounds: round, status: "contextOverflow" };
       }
 
       // Termination 3: Loop Detection
       if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
-        return { response: "Loop detected.", fullMessages: currentMessages, rounds: round, status: "loop_detected" };
+        return { response: "Loop detected.", fullMessages: currentMessages, rounds: round, status: "loopDetected" };
       }
 
       // Execute Tools
@@ -456,7 +485,7 @@ export class ResponseProcessor {
       const normalizedToolResults = runResult.toolResults.map((msg) => ({
         role: "tool",
         content: msg.content ?? "",
-        toolCallId: msg.toolCallId || msg.tool_call_id
+        toolCallId: msg.toolCallId
       }));
 
       currentMessages.push(...normalizedToolResults);
@@ -488,7 +517,7 @@ export class ResponseProcessor {
           return {
             role: "tool",
             content: msg.content ?? "",
-            toolCallId: msg.toolCallId || msg.tool_call_id
+            toolCallId: msg.toolCallId
           };
         }
         return msg;
@@ -515,6 +544,6 @@ export class ResponseProcessor {
       };
     }
 
-    return { response: "Max rounds reached.", fullMessages: currentMessages, rounds: maxRounds, status: "max_rounds" };
+    return { response: "Max rounds reached.", fullMessages: currentMessages, rounds: maxRounds, status: "maxRounds" };
   }
 } 

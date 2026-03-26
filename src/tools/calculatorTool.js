@@ -176,7 +176,7 @@ function clearMemory() {
 export const calculatorTool = {
   type: "function",
   function: {
-    name: 'calculator_tool',
+    name: 'calculatorTool',
     description: 'Evaluates mathematical expressions using mathjs. Supports arithmetic, trigonometry, logarithms, unit conversions, rounding, and calculator memory operations.',
     parameters: {
       type: 'object',
@@ -199,7 +199,7 @@ export const calculatorTool = {
     }
   },
   handler: async (params) => {
-    console.log('🧮 [CALCULATOR TOOL] Executing calculator_tool with params:', params);
+    console.log('🧮 [CALCULATOR TOOL] Executing calculatorTool with params:', params);
 
     const { taskProgress, ...restParams } = params;
     const { action, ...actionParams } = restParams;

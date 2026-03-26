@@ -19,7 +19,7 @@ import { mongoDBConnection } from '../storage/MongoDBConnection.js';
 export const thoughtTool = {
   type: "function",
   function: {
-    name: "record_thought",
+    name: "recordThought",
     description: "Use this tool to externalize your reasoning process. It serves as your mental scratchpad to align your hypothesis, plan, and uncertainties before proceeding. This is your 'Plan Twice, Act Once' mechanism. All thoughts are automatically saved to the storage system for audit trails and learning.",
     parameters: {
       type: "object",

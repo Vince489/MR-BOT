@@ -425,7 +425,7 @@ function convertUTCToLocal({ utcTimestamp, targetTimezone, format = "MMMM d, yyy
 export const dateTimeTool = {
   type: "function",
   function: {
-    name: 'datetime_tool',
+    name: 'dateTimeTool',
     description: 'Provides current date and time using the host timezone, and can perform date/time calculations, conversions, and natural language parsing.',
     parameters: {
       type: "object",
@@ -497,9 +497,9 @@ export const dateTimeTool = {
     }
   },
   handler: async (params) => {
-    console.log(`🕒 [DATETIME TOOL] Executing datetime_tool with params:`, params);
+    console.log(`🕒 [DATETIME TOOL] Executing dateTimeTool with params:`, params);
 
-    // Extract task_progress if present
+    // Extract taskProgress if present
     const { task_progress, ...restParams } = params;
     const { action, ...actionParams } = restParams;
 

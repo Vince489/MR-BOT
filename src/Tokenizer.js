@@ -27,7 +27,7 @@ export function countTokens(text) {
 
 /**
  * Count tokens in a messages array using js-tiktoken
- * @param {Array} messages - Array of message objects with role, content, and optionally tool_calls
+ * @param {Array} messages - Array of message objects with role, content, and optionally toolCalls
  * @returns {number} - Total token count
  */
 export function countMessageTokens(messages) {
@@ -47,8 +47,8 @@ export function countMessageTokens(messages) {
     }
     
     // Count tool calls tokens if present
-    if (msg.tool_calls) {
-      tokenCount += enc.encode(JSON.stringify(msg.tool_calls)).length;
+    if (msg.toolCalls) {
+      tokenCount += enc.encode(JSON.stringify(msg.toolCalls)).length;
     }
     
     // +4 tokens per message for role/formatting overhead (name, role separators, etc.)

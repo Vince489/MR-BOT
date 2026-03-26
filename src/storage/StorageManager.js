@@ -49,7 +49,7 @@ class StorageManager {
       this.currentStorage = this.jsonStorage;
       this.jsonStorage.setDebug(debug);
       console.log('📁 Using JSON file storage');
-    } else if (this.storageType === 'no-memory' || this.storageType === 'no_memory') {
+    } else if (this.storageType === 'no-memory' || this.storageType === 'noMemory') {
       this.currentStorage = this.noMemoryStorage;
       this.noMemoryStorage.setDebug(debug);
       console.log('🚫 Using No Memory storage (no persistence)');

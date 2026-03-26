@@ -346,6 +346,8 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
         messages.push(...toolResults);
 
         // The loop will now repeat, sending the history (including tool results) back to Mistral
+        // IMPORTANT: Continue the loop to send the updated history back to the API
+        continue;
       } else {
         // No tool calls, we are finished
         if (assistantMessage.content) {
@@ -722,6 +724,17 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     }
   }
 
+  /**
+   * Load chat history from storage (lazy initialization)
+   * @returns {Promise<Array>} - Chat history messages
+   */
+  async loadHistory() {
+    if (!this.storageManager) {
+      return [];
+    }
+    await this._ensureStorageInitialized();
+    return await this.storageManager.loadHistory();
+  }
 
   /**
    * Save chat history to storage (lazy initialization)
