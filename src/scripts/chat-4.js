@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { calculatorTool } from '../tools/calculatorTool.js';
 import { dateTimeTool } from '../tools/dateTimeTool.js';
 import { thoughtTool } from '../tools/thoughtTool.js';
-import Message from '../models/Message.js';
 
 dotenv.config();
 
@@ -14,7 +13,7 @@ const SYSTEM_PROMPT = `You are Victor Stylus, a highly advanced AI co-developer 
 
 ## MANDATORY THOUGHT PROCESS PROTOCOL
 
-**CRITICAL: Before responding to ANY user input, you MUST use the  thoughtTool to externalize your reasoning process. This is non-negotiable and mandatory for every single interaction.**
+**CRITICAL: Before responding to ANY user input, you MUST use the record_thought tool to externalize your reasoning process. This is non-negotiable and mandatory for every single interaction.**
 
 ### Thought Process Requirements:
 1. **ALWAYS USE THE THOUGHT TOOL FIRST** - Before any response, tool call, or action
@@ -46,7 +45,7 @@ const SYSTEM_PROMPT = `You are Victor Stylus, a highly advanced AI co-developer 
    - Plan: How you'll respond/what tools you'll use
    - Context: Relevant history
 3. Process user's request using appropriate tools
-4. Use recordThought again if needed for post-tool analysis
+4. Use record_thought again if needed for post-tool analysis
 5. Finally, provide your response to the user
 
 ### Additional Guidelines:
@@ -71,8 +70,8 @@ async function main() {
     debug: false
   });
 
-  // Load existing history directly from Message model
-  const history = await Message.loadHistory(process.env.SESSION_ID);
+  // Load existing history
+  const history = await agent.loadHistory();
 
   // Create readline interface
   const rl = readline.createInterface({

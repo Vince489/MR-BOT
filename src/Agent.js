@@ -20,6 +20,7 @@ export class Agent extends EventEmitter {
    * @param {Array} [config.tools=[]] - Array of tool definitions
    * @param {boolean} [config.parallelToolCalls=true] - Execute multiple tool calls concurrently using Promise.all()
    * @param {Object} [config.loopDetection] - Loop detection configuration with Circuit Breaker settings
+   * @param {string} [config.sessionId] - Optional session ID for chat history management
    */
   constructor(config) {
     super(); // Initialize EventEmitter
@@ -27,6 +28,9 @@ export class Agent extends EventEmitter {
     // Basic validation
     if (!config.apiKey) throw new Error("apiKey is required");
     if (!config.systemPrompt) throw new Error("systemPrompt is required");
+    
+    // Store session ID for chat history management
+    this.sessionId = config.sessionId || this._generateSessionId();
 
     this.client = new Mistral({
       apiKey: config.apiKey,
@@ -138,7 +142,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 **Example:**
 \`\`\`
 {
-  "tool": "search_web",
+  "tool": "searchWeb",
   "arguments": {
     "query": "latest AI developments",
     "taskProgress": "- [ ] Research AI developments\\n- [ ] Analyze findings\\n- [x] Define research scope"
@@ -326,7 +330,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       }));
 
       if (toolCalls.length > 0) {
-        // MANDATORY: Add the assistant's toolCall message to history BEFORE the tool results
+        // MANDATORY: Add the assistant's tool_call message to history BEFORE the tool results
         assistantMessage.toolCalls = toolCalls;
         // Keep tool-call assistant messages API-compliant
         assistantMessage.content = assistantMessage.content || "";
@@ -722,53 +726,83 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     }
   }
 
+  /**
+   * Generate a unique session ID
+   * @returns {string} - Generated session ID
+   * @private
+   */
+  _generateSessionId() {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Load chat history from storage (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
+   * @returns {Promise<Array>} - Chat history messages
+   */
+  async loadHistory(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!this.storageManager) {
+      return [];
+    }
+    await this._ensureStorageInitialized();
+    return await this.storageManager.loadHistory(targetSessionId);
+  }
 
   /**
    * Save chat history to storage (lazy initialization)
    * @param {Array} messages - Messages to save
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<void>}
    */
-  async saveHistory(messages) {
+  async saveHistory(messages, sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return;
     }
     await this._ensureStorageInitialized();
-    await this.storageManager.saveHistory(messages);
+    await this.storageManager.saveHistory(targetSessionId, messages);
   }
 
   /**
    * Clear chat history from storage (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<void>}
    */
-  async clearHistory() {
+  async clearHistory(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return;
     }
     await this._ensureStorageInitialized();
-    await this.storageManager.clearHistory();
+    await this.storageManager.clearHistory(targetSessionId);
   }
 
   /**
    * Get storage statistics (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<Object>} - Storage statistics
    */
-  async getStorageStats() {
+  async getStorageStats(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return { type: 'none', initialized: false };
     }
     await this._ensureStorageInitialized();
-    return await this.storageManager.getStats();
+    return await this.storageManager.getStats(targetSessionId);
   }
 
   /**
    * Get current storage status (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<Object>} - Storage status
    */
-  async getStorageStatus() {
+  async getStorageStatus(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return { type: 'none', initialized: false };
     }
     await this._ensureStorageInitialized();
-    return await this.storageManager.getStatus();
+    return await this.storageManager.getStatus(targetSessionId);
   }
 }

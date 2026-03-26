@@ -444,9 +444,9 @@ export class ResponseProcessor {
         }
       }
 
-      // Finalize tool calls
+      // Finalize tool calls - preserve original IDs to avoid mismatch
       const accumulated = Array.from(toolCallAccumulator.values()).map((tc, i) => ({
-        id: tc.id || `call_${round}_${i}`,
+        id: tc.id || `call_${Date.now()}_${i}`,
         type: "function",
         function: {
           name: tc.function?.name || "",
@@ -523,19 +523,20 @@ export class ResponseProcessor {
         return msg;
       });
 
-      // Temporary diagnostics for tool-call/response pairing issues
-      const lastAssistantWithCalls = [...apiMessages].reverse().find(
-        (m) => m.role === "assistant" && Array.isArray(m.toolCalls) && m.toolCalls.length > 0
-      );
-      const trailingToolResponses = [...apiMessages].reverse().filter((m) => m.role === "tool");
-      if (lastAssistantWithCalls) {
-        console.log(
-          `🔎 [TOOL LINK CHECK] calls=${lastAssistantWithCalls.toolCalls.length}, responses=${trailingToolResponses.length}`
-        );
-      }
 
       const nextResponse = await client.chat.complete({ model, messages: apiMessages });
       const continuation = await this.processResponse(nextResponse, apiMessages);
+      
+      // Stream the final response character by character if onChunk callback is provided
+      if (onChunk && continuation.response) {
+        for (let i = 0; i < continuation.response.length; i++) {
+          const char = continuation.response[i];
+          onChunk(char);
+          // Add a small delay to simulate real-time streaming
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+      
       return {
         response: continuation.response,
         fullMessages: continuation.fullMessages,
@@ -546,4 +547,4 @@ export class ResponseProcessor {
 
     return { response: "Max rounds reached.", fullMessages: currentMessages, rounds: maxRounds, status: "maxRounds" };
   }
-} 
+}

@@ -20,19 +20,20 @@ class MongoDBStorage {
   }
 
   /**
-   * Load chat history from MongoDB
+   * Load chat history from MongoDB for a specific session
+   * @param {string} sessionId - Session ID to load history for
    */
-  async loadHistory() {
+  async loadHistory(sessionId) {
     try {
       // Try to connect to MongoDB
       await mongoDBConnection.connect();
       
-      const history = await Message.loadHistory(this.sessionId);
+      const history = await Message.loadHistory(sessionId);
       
       if (this.debug && history.length > 0) {
-        console.log(`🗄️  Loaded ${history.length} messages from MongoDB history`);
+        console.log(`🗄️  Loaded ${history.length} messages from MongoDB history for session ${sessionId}`);
       } else if (this.debug) {
-        console.log('🗄️  No previous MongoDB history found. Starting fresh.');
+        console.log(`🗄️  No previous MongoDB history found for session ${sessionId}. Starting fresh.`);
       }
       
       return history;
@@ -44,9 +45,11 @@ class MongoDBStorage {
   }
 
   /**
-   * Save chat history to MongoDB
+   * Save chat history to MongoDB for a specific session
+   * @param {string} sessionId - Session ID to save history for
+   * @param {Array} messages - Messages to save
    */
-  async saveHistory(messages) {
+  async saveHistory(sessionId, messages) {
     try {
       // Ensure we're connected
       if (!mongoDBConnection.isReady()) {
@@ -57,12 +60,12 @@ class MongoDBStorage {
       const messagesToSave = messages.filter(msg => msg.role !== 'system');
       
       // Ensure User and Session exist before saving messages
-      const success = await this.ensureUserAndSessionExists() && 
-                     await Message.saveMessages(this.sessionId, messagesToSave);
+      const success = await this.ensureUserAndSessionExists(sessionId) && 
+                     await Message.saveMessages(sessionId, messagesToSave);
       
       if (this.debug && success) {
         const filteredCount = messages.length - messagesToSave.length;
-        console.log(`🗄️  Saved ${messagesToSave.length} messages to MongoDB (filtered out ${filteredCount} system prompts/empty messages)`);
+        console.log(`🗄️  Saved ${messagesToSave.length} messages to MongoDB for session ${sessionId} (filtered out ${filteredCount} system prompts/empty messages)`);
       }
       
       return success;
@@ -73,16 +76,17 @@ class MongoDBStorage {
   }
 
   /**
-   * Clear chat history from MongoDB
+   * Clear chat history from MongoDB for a specific session
+   * @param {string} sessionId - Session ID to clear history for
    */
-  async clearHistory() {
+  async clearHistory(sessionId) {
     try {
-      const success = await Message.clearHistory(this.sessionId);
+      const success = await Message.clearHistory(sessionId);
       
       if (this.debug && success) {
-        console.log('🗄️  MongoDB history cleared.');
+        console.log(`🗄️  MongoDB history cleared for session ${sessionId}.`);
       } else if (this.debug) {
-        console.log('⚠️  Failed to clear MongoDB history.');
+        console.log(`⚠️  Failed to clear MongoDB history for session ${sessionId}.`);
       }
       
       return success;
@@ -125,11 +129,12 @@ class MongoDBStorage {
   }
 
   /**
-   * Get storage statistics
+   * Get storage statistics for a specific session
+   * @param {string} sessionId - Session ID to get stats for
    */
-  async getStats() {
+  async getStats(sessionId) {
     try {
-      const stats = await Message.getSessionStats(this.sessionId);
+      const stats = await Message.getSessionStats(sessionId);
       
       return {
         totalMessages: stats.totalMessages || 0,
@@ -137,7 +142,7 @@ class MongoDBStorage {
         assistantMessages: stats.assistantMessages || 0,
         oldestMessage: stats.oldestMessage,
         newestMessage: stats.newestMessage,
-        sessionId: this.sessionId
+        sessionId: sessionId
       };
     } catch (error) {
       if (this.debug) console.error('Error getting MongoDB stats:', error);
@@ -147,7 +152,7 @@ class MongoDBStorage {
         assistantMessages: 0,
         oldestMessage: null,
         newestMessage: null,
-        sessionId: this.sessionId
+        sessionId: sessionId
       };
     }
   }
@@ -165,8 +170,9 @@ class MongoDBStorage {
 
   /**
    * Ensure User and Session documents exist before saving messages
+   * @param {string} sessionId - Session ID to ensure exists
    */
-  async ensureUserAndSessionExists() {
+  async ensureUserAndSessionExists(sessionId) {
     try {
       // Get user info from environment variables
       const userId = process.env.USER_ID || 'default';
@@ -184,14 +190,14 @@ class MongoDBStorage {
       }
       
       // Check if session exists, create if not
-      let session = await Session.findOne({ sessionId: this.sessionId });
+      let session = await Session.findOne({ sessionId: sessionId });
       if (!session) {
         session = new Session({
-          sessionId: this.sessionId,
+          sessionId: sessionId,
           user: user._id
         });
         await session.save();
-        if (this.debug) console.log(`🗄️  Created new session: ${this.sessionId}`);
+        if (this.debug) console.log(`🗄️  Created new session: ${sessionId}`);
       } else {
         // Update last activity
         session.lastActivity = new Date();
