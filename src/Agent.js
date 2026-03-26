@@ -330,7 +330,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       }));
 
       if (toolCalls.length > 0) {
-        // MANDATORY: Add the assistant's tool_call message to history BEFORE the tool results
+        // MANDATORY: Add the assistant's toolCall message to history BEFORE the tool results
         assistantMessage.toolCalls = toolCalls;
         // Keep tool-call assistant messages API-compliant
         assistantMessage.content = assistantMessage.content || "";

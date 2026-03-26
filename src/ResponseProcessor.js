@@ -45,34 +45,6 @@ export class ResponseProcessor {
     return true;
   }
 
-  /**
-   * Validates that a tool result message uses camelCase format.
-   * Throws an error if snake_case is detected, enforcing strict camelCase.
-   * @param {Object} toolResult - Tool result message to validate
-   * @param {string} toolName - Name of the tool for error context
-   * @throws {Error} - If snake_case is detected in the tool result
-   */
-  validateToolResultFormat(toolResult, toolName) {
-    if (!toolResult || typeof toolResult !== 'object') {
-      return; // Skip validation for non-object results
-    }
-
-    // Check for snake_case toolCallId
-    if (toolResult.toolCallId) {
-      throw new Error(
-        `[CRITICAL ARCHITECTURAL ERROR]: Tool "${toolName}" returned 'tool_call_id'. ` +
-        `The system requires 'toolCallId' (camelCase). Please update your tool handler definition.`
-      );
-    }
-
-    // Check that camelCase toolCallId is present
-    if (!toolResult.toolCallId) {
-      throw new Error(
-        `[CRITICAL ARCHITECTURAL ERROR]: Tool "${toolName}" missing required 'toolCallId'. ` +
-        `Tool results must include a camelCase toolCallId field.`
-      );
-    }
-  }
 
   /**
    * Intercepts and removes meta-arguments (like taskProgress) before validation.
@@ -361,7 +333,7 @@ export class ResponseProcessor {
       }
 
       // Update progress tracking after tool execution
-      this.updateTaskProgress(toolResults, round);
+      this.updateTaskProgress();
 
       // Prepare for next round
       currentResponse = await client.chat.complete({ model, messages: currentMessages });
@@ -380,11 +352,9 @@ export class ResponseProcessor {
 
   /**
    * Update task progress based on Agent's state and check for completion.
-   * @param {Array} toolResults - Results from tool execution
-   * @param {number} round - Current round number
    * @returns {Object} - Progress update status
    */
-  updateTaskProgress(toolResults, round) {
+  updateTaskProgress() {
     // The Agent already updated this.agent.progressState via _captureProgressIntent
     // Check if all tasks in the Map are completed
     const state = this.agent.progressState;
@@ -491,12 +461,6 @@ export class ResponseProcessor {
       currentMessages.push(...normalizedToolResults);
       loopDetector.updateRecentToolCalls(assistantMessage.toolCalls, runResult.allCallsSuccessful);
 
-      // Prepare next round request.
-      // NOTE: For some Mistral tool-call flows, a follow-up streaming request can
-      // reject with invalid_request_message_order even when counts match. Use
-      // non-streaming continuation for reliability after tool execution.
-      // Normalise messages into the camelCase shapes the Mistral SDK outbound
-      // schema expects (toolCalls / toolCallId), so Zod can remap them correctly.
       const apiMessages = currentMessages.map((msg) => {
         const tcs = msg.toolCalls;
         if (msg.role === "assistant" && tcs) {
