@@ -20,6 +20,7 @@ export class Agent extends EventEmitter {
    * @param {Array} [config.tools=[]] - Array of tool definitions
    * @param {boolean} [config.parallelToolCalls=true] - Execute multiple tool calls concurrently using Promise.all()
    * @param {Object} [config.loopDetection] - Loop detection configuration with Circuit Breaker settings
+   * @param {string} [config.sessionId] - Optional session ID for chat history management
    */
   constructor(config) {
     super(); // Initialize EventEmitter
@@ -27,6 +28,9 @@ export class Agent extends EventEmitter {
     // Basic validation
     if (!config.apiKey) throw new Error("apiKey is required");
     if (!config.systemPrompt) throw new Error("systemPrompt is required");
+    
+    // Store session ID for chat history management
+    this.sessionId = config.sessionId || this._generateSessionId();
 
     this.client = new Mistral({
       apiKey: config.apiKey,
@@ -56,7 +60,7 @@ this.systemPrompt = (config.tools && config.tools.length > 0)
         .map(t => [t.function.name, t.handler])
     );
 
-    // Clone and modify tool definitions to include task_progress parameter
+    // Clone and modify tool definitions to include taskProgress parameter
     this.apiTools = this._enhanceToolsWithProgress(this.tools);
 
     // Initialize Circuit Breaker with loop detection configuration
@@ -138,7 +142,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 **Example:**
 \`\`\`
 {
-  "tool": "search_web",
+  "tool": "searchWeb",
   "arguments": {
     "query": "latest AI developments",
     "taskProgress": "- [ ] Research AI developments\\n- [ ] Analyze findings\\n- [x] Define research scope"
@@ -262,31 +266,109 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
   /**
    * Execute a streaming request with tool management
+   * Handles the recursive tool-calling loop to avoid message order errors
    * @param {Array} history - Conversation history
    * @param {string} userInput - User input message
    * @param {Function} [onChunk] - Optional callback for each text token
    * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
    */
   async executeStream(history, userInput, onChunk) {
+    // 1. Prepare initial message state
     const messages = [
       { role: "system", content: this.systemPrompt },
       ...(history || []),
       { role: "user", content: userInput }
     ];
 
-    const stream = await this.client.chat.stream({
-      model: this.model,
-      messages: messages,
-      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
-    });
+    let continueStreaming = true;
+    let fullResponse = "";
 
-    return this.responseProcessor.processStreamResponse(stream, messages, onChunk);
+    while (continueStreaming) {
+      const stream = await this.client.chat.stream({
+        model: this.model,
+        messages: messages,
+        ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
+      });
+
+      let assistantMessage = { role: "assistant", content: "", toolCalls: [] };
+      const toolCallAccumulator = new Map();
+
+      // Consume the stream
+      for await (const chunk of stream) {
+        const delta = chunk.data?.choices?.[0]?.delta || chunk.choices?.[0]?.delta;
+        if (!delta) continue;
+
+        if (delta.content) {
+          assistantMessage.content += delta.content;
+          if (onChunk) onChunk(delta.content);
+          fullResponse += delta.content;
+        }
+
+        const streamingToolCalls = delta.toolCalls;
+        if (streamingToolCalls) {
+          for (const tc of streamingToolCalls) {
+            const index = tc.index ?? 0;
+            if (!toolCallAccumulator.has(index)) {
+              toolCallAccumulator.set(index, { id: tc.id || "", function: { name: "", arguments: "" } });
+            }
+            const current = toolCallAccumulator.get(index);
+            if (tc.id) current.id = tc.id;
+            if (tc.function?.name) current.function.name += tc.function.name;
+            if (tc.function?.arguments) current.function.arguments += tc.function.arguments;
+          }
+        }
+      }
+
+      // Finalize tool calls
+      const toolCalls = Array.from(toolCallAccumulator.values()).map((tc, i) => ({
+        id: tc.id || `call_${Date.now()}_${i}`,
+        type: "function",
+        function: {
+          name: tc.function?.name || "",
+          arguments: tc.function?.arguments || ""
+        }
+      }));
+
+      if (toolCalls.length > 0) {
+        // MANDATORY: Add the assistant's toolCall message to history BEFORE the tool results
+        assistantMessage.toolCalls = toolCalls;
+        // Keep tool-call assistant messages API-compliant
+        assistantMessage.content = assistantMessage.content || "";
+        messages.push(assistantMessage);
+
+        // Capture progress intent (from existing logic)
+        this._captureProgressIntent({ choices: [{ message: assistantMessage }] });
+
+        // Execute tools using ToolManager
+        const toolResults = [];
+        for (const tc of toolCalls) {
+          const result = await this.toolManager.executeToolCall(tc, [], userInput, 0, null);
+          toolResults.push(result);
+        }
+
+        // Add the tool results to the history
+        messages.push(...toolResults);
+
+        // The loop will now repeat, sending the history (including tool results) back to Mistral
+      } else {
+        // No tool calls, we are finished
+        if (assistantMessage.content) {
+          messages.push({ role: "assistant", content: assistantMessage.content });
+        }
+        continueStreaming = false;
+      }
+    }
+
+    return {
+      response: fullResponse,
+      fullMessages: messages
+    };
   }
 
   /**
-   * Enhance tool definitions to include task_progress parameter and generate proper Mistral format
+   * Enhance tool definitions to include taskProgress parameter and generate proper Mistral format
    * @param {Array} tools - Original tool definitions
-   * @returns {Array} - Enhanced tool definitions with task_progress parameter in Mistral format
+   * @returns {Array} - Enhanced tool definitions with taskProgress parameter in Mistral format
    * @private
    */
   _enhanceToolsWithProgress(tools) {
@@ -294,7 +376,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       // Clone the tool function to avoid modifying the original
       const modifiedToolFunction = { ...toolFunction };
 
-      // If parameters are defined, add task_progress as an optional parameter
+      // If parameters are defined, add taskProgress as an optional parameter
       if (modifiedToolFunction.parameters) {
         // Clone the parameters to avoid modifying the original tool definition
         const modifiedParameters = { ...modifiedToolFunction.parameters };
@@ -319,10 +401,10 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
           };
         }
 
-        // Ensure task_progress is not in the required array
+        // Ensure taskProgress is not in the required array
         if (modifiedParameters.required) {
           modifiedParameters.required = modifiedParameters.required.filter(
-            (param) => param !== "task_progress"
+            (param) => param !== "taskProgress"
           );
         }
 
@@ -443,7 +525,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
   _captureProgressIntent(response) {
     try {
       // Extract tool calls from response
-      const toolCalls = response?.choices?.[0]?.message?.tool_calls || [];
+      const toolCalls = response?.choices?.[0]?.message?.toolCalls || [];
 
       if (toolCalls.length === 0) return;
 
@@ -645,63 +727,82 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
   }
 
   /**
+   * Generate a unique session ID
+   * @returns {string} - Generated session ID
+   * @private
+   */
+  _generateSessionId() {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
    * Load chat history from storage (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<Array>} - Chat history messages
    */
-  async loadHistory() {
+  async loadHistory(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return [];
     }
     await this._ensureStorageInitialized();
-    return await this.storageManager.loadHistory();
+    return await this.storageManager.loadHistory(targetSessionId);
   }
 
   /**
    * Save chat history to storage (lazy initialization)
    * @param {Array} messages - Messages to save
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<void>}
    */
-  async saveHistory(messages) {
+  async saveHistory(messages, sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return;
     }
     await this._ensureStorageInitialized();
-    await this.storageManager.saveHistory(messages);
+    await this.storageManager.saveHistory(targetSessionId, messages);
   }
 
   /**
    * Clear chat history from storage (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<void>}
    */
-  async clearHistory() {
+  async clearHistory(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return;
     }
     await this._ensureStorageInitialized();
-    await this.storageManager.clearHistory();
+    await this.storageManager.clearHistory(targetSessionId);
   }
 
   /**
    * Get storage statistics (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<Object>} - Storage statistics
    */
-  async getStorageStats() {
+  async getStorageStats(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return { type: 'none', initialized: false };
     }
     await this._ensureStorageInitialized();
-    return await this.storageManager.getStats();
+    return await this.storageManager.getStats(targetSessionId);
   }
 
   /**
    * Get current storage status (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
    * @returns {Promise<Object>} - Storage status
    */
-  async getStorageStatus() {
+  async getStorageStatus(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
     if (!this.storageManager) {
       return { type: 'none', initialized: false };
     }
     await this._ensureStorageInitialized();
-    return await this.storageManager.getStatus();
+    return await this.storageManager.getStatus(targetSessionId);
   }
 }

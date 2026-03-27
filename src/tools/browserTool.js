@@ -3,7 +3,7 @@ import open from 'open';
 // Define browser tool with optimized structure for Mistral SDK
 export const browserTool = {
   function: {
-    name: "browser_open",
+    name: "browserTool",
     description: "Open a URL or local file in the default browser.",
     parameters: {
       type: "object",

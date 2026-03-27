@@ -10,7 +10,7 @@ export class ToolManager extends EventEmitter {
     this.handlers = {};
     this.apiTools = [];
     this.recentToolCalls = [];
-    this.MAX_RECENT_CALLS = 3;
+    this.maxRecentCalls = 3;
   }
 
   /**
@@ -22,12 +22,12 @@ export class ToolManager extends EventEmitter {
 
     this.handlers = Object.fromEntries(tools.map((t) => [t.function.name, t.handler]));
     
-    // Clone and modify the tool definitions to include task_progress as an optional parameter
+    // Clone and modify the tool definitions to include taskProgress as an optional parameter
     this.apiTools = tools.map(({ handler, function: toolFunction, ...tool }) => {
       // Clone the tool function to avoid modifying the original
       const modifiedToolFunction = { ...toolFunction };
 
-      // If parameters are defined, add task_progress as an optional parameter
+      // If parameters are defined, add taskProgress as an optional parameter
       if (modifiedToolFunction.parameters) {
         // Clone the parameters to avoid modifying the original tool definition
         const modifiedParameters = { ...modifiedToolFunction.parameters };
@@ -46,10 +46,10 @@ export class ToolManager extends EventEmitter {
           };
         }
 
-        // Ensure task_progress is not in the required array
+        // Ensure taskProgress is not in the required array
         if (modifiedParameters.required) {
           modifiedParameters.required = modifiedParameters.required.filter(
-            (param) => param !== "task_progress"
+            (param) => param !== "taskProgress"
           );
         }
 
@@ -149,9 +149,9 @@ export class ToolManager extends EventEmitter {
    */
   async _handleToolError(error, toolCall, actionsTaken, userInput, retryCount, startTime, abortSignal) {
     const isRetriable = error.message?.includes("rate limit") || error.code === "ETIMEDOUT";
-    const MAX_RETRIES = 2;
+    const maxRetries = 2;
 
-    if (isRetriable && retryCount < MAX_RETRIES) {
+    if (isRetriable && retryCount < maxRetries) {
       await new Promise((r) => setTimeout(r, Math.pow(2, retryCount) * 1000));
       return this.executeToolCall(toolCall, actionsTaken, userInput, retryCount + 1, abortSignal);
     }
@@ -232,8 +232,8 @@ export class ToolManager extends EventEmitter {
     this.recentToolCalls.unshift(...newCalls);
 
     // Keep only the most recent calls
-    if (this.recentToolCalls.length > this.MAX_RECENT_CALLS * 2) {
-      this.recentToolCalls = this.recentToolCalls.slice(0, this.MAX_RECENT_CALLS * 2);
+    if (this.recentToolCalls.length > this.maxRecentCalls * 2) {
+      this.recentToolCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
     }
   }
 
@@ -316,7 +316,7 @@ export class ToolManager extends EventEmitter {
   }
 
   /**
-   * Process task_progress parameter to extract and validate progress information
+   * Process taskProgress parameter to extract and validate progress information
    * @param {string} taskProgress - Markdown-formatted checklist string
    * @param {string} toolName - Name of the tool being executed
    * @param {Object} args - Tool arguments for context
@@ -368,9 +368,9 @@ export class ToolManager extends EventEmitter {
       }
 
     } catch (error) {
-      // Don't throw error for task_progress parsing issues, just log them
+      // Don't throw error for taskProgress parsing issues, just log them
       if (this.debug) {
-        console.log(`[DEBUG] Failed to parse task_progress for ${toolName}:`, error.message);
+        console.log(`[DEBUG] Failed to parse taskProgress for ${toolName}:`, error.message);
       }
     }
   }

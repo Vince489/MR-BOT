@@ -45,6 +45,7 @@ export class ResponseProcessor {
     return true;
   }
 
+
   /**
    * Intercepts and removes meta-arguments (like taskProgress) before validation.
    * @param {Object} args - Raw arguments from the LLM
@@ -74,8 +75,7 @@ export class ResponseProcessor {
       return {
         role: "tool",
         content: JSON.stringify({ status: "error", message: "Invalid tool call structure" }),
-        // Mistral SDK v1.x outbound schema expects camelCase: toolCallId
-        toolCallId: toolCall?.id || "unknown"
+        toolCallId: toolCall.id
       };
     }
 
@@ -289,7 +289,7 @@ export class ResponseProcessor {
           response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
           fullMessages: currentMessages,
           rounds: round,
-          status: "context_overflow"
+          status: "contextOverflow"
         };
       }
 
@@ -300,7 +300,7 @@ export class ResponseProcessor {
           response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
           fullMessages: currentMessages,
           rounds: round,
-          status: "max_rounds"
+          status: "maxRounds"
         };
       }
 
@@ -327,12 +327,12 @@ export class ResponseProcessor {
           response: "Loop detected: Agent stopped to prevent infinite recursion.",
           fullMessages: currentMessages,
           rounds: round,
-          status: "loop_detected"
+          status: "loopDetected"
         };
       }
 
       // Update progress tracking after tool execution
-      this.updateTaskProgress(toolResults, round);
+      this.updateTaskProgress();
 
       // Prepare for next round
       currentResponse = await client.chat.complete({ model, messages: currentMessages });
@@ -345,17 +345,15 @@ export class ResponseProcessor {
       response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
       fullMessages: currentMessages,
       rounds: maxRounds,
-      status: "max_rounds"
+          status: "maxRounds"
     };
   }
 
   /**
    * Update task progress based on Agent's state and check for completion.
-   * @param {Array} toolResults - Results from tool execution
-   * @param {number} round - Current round number
    * @returns {Object} - Progress update status
    */
-  updateTaskProgress(toolResults, round) {
+  updateTaskProgress() {
     // The Agent already updated this.agent.progressState via _captureProgressIntent
     // Check if all tasks in the Map are completed
     const state = this.agent.progressState;
@@ -415,9 +413,9 @@ export class ResponseProcessor {
         }
       }
 
-      // Finalize tool calls
+      // Finalize tool calls - preserve original IDs to avoid mismatch
       const accumulated = Array.from(toolCallAccumulator.values()).map((tc, i) => ({
-        id: tc.id || `call_${round}_${i}`,
+        id: tc.id || `call_${Date.now()}_${i}`,
         type: "function",
         function: {
           name: tc.function?.name || "",
@@ -441,12 +439,12 @@ export class ResponseProcessor {
 
       // Termination 2: Hard Stop
       if (!this._hasRoomForNextRound(currentMessages)) {
-        return { response: "Context limit reached.", fullMessages: currentMessages, rounds: round, status: "context_overflow" };
+        return { response: "Context limit reached.", fullMessages: currentMessages, rounds: round, status: "contextOverflow" };
       }
 
       // Termination 3: Loop Detection
       if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
-        return { response: "Loop detected.", fullMessages: currentMessages, rounds: round, status: "loop_detected" };
+        return { response: "Loop detected.", fullMessages: currentMessages, rounds: round, status: "loopDetected" };
       }
 
       // Execute Tools
@@ -456,18 +454,12 @@ export class ResponseProcessor {
       const normalizedToolResults = runResult.toolResults.map((msg) => ({
         role: "tool",
         content: msg.content ?? "",
-        toolCallId: msg.toolCallId || msg.tool_call_id
+        toolCallId: msg.toolCallId
       }));
 
       currentMessages.push(...normalizedToolResults);
       loopDetector.updateRecentToolCalls(assistantMessage.toolCalls, runResult.allCallsSuccessful);
 
-      // Prepare next round request.
-      // NOTE: For some Mistral tool-call flows, a follow-up streaming request can
-      // reject with invalid_request_message_order even when counts match. Use
-      // non-streaming continuation for reliability after tool execution.
-      // Normalise messages into the camelCase shapes the Mistral SDK outbound
-      // schema expects (toolCalls / toolCallId), so Zod can remap them correctly.
       const apiMessages = currentMessages.map((msg) => {
         const tcs = msg.toolCalls;
         if (msg.role === "assistant" && tcs) {
@@ -488,25 +480,26 @@ export class ResponseProcessor {
           return {
             role: "tool",
             content: msg.content ?? "",
-            toolCallId: msg.toolCallId || msg.tool_call_id
+            toolCallId: msg.toolCallId
           };
         }
         return msg;
       });
 
-      // Temporary diagnostics for tool-call/response pairing issues
-      const lastAssistantWithCalls = [...apiMessages].reverse().find(
-        (m) => m.role === "assistant" && Array.isArray(m.toolCalls) && m.toolCalls.length > 0
-      );
-      const trailingToolResponses = [...apiMessages].reverse().filter((m) => m.role === "tool");
-      if (lastAssistantWithCalls) {
-        console.log(
-          `🔎 [TOOL LINK CHECK] calls=${lastAssistantWithCalls.toolCalls.length}, responses=${trailingToolResponses.length}`
-        );
-      }
 
       const nextResponse = await client.chat.complete({ model, messages: apiMessages });
       const continuation = await this.processResponse(nextResponse, apiMessages);
+      
+      // Stream the final response character by character if onChunk callback is provided
+      if (onChunk && continuation.response) {
+        for (let i = 0; i < continuation.response.length; i++) {
+          const char = continuation.response[i];
+          onChunk(char);
+          // Add a small delay to simulate real-time streaming
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+      
       return {
         response: continuation.response,
         fullMessages: continuation.fullMessages,
@@ -515,6 +508,6 @@ export class ResponseProcessor {
       };
     }
 
-    return { response: "Max rounds reached.", fullMessages: currentMessages, rounds: maxRounds, status: "max_rounds" };
+    return { response: "Max rounds reached.", fullMessages: currentMessages, rounds: maxRounds, status: "maxRounds" };
   }
-} 
+}

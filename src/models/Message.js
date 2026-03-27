@@ -21,7 +21,7 @@ const messageSchema = new Schema({
     enum: ['user', 'assistant', 'system', 'tool'], 
     required: true 
   },
-  // The text content (can be empty for tool_calls messages)
+  // The text content (can be empty for toolCalls messages)
   content: { 
     type: String, 
     default: "" 
@@ -67,24 +67,40 @@ messageSchema.index({ session: 1, 'metadata.isPopped': 1, createdAt: -1 });
 // 1. Load History: Fetches and formats messages for the LLM API
 messageSchema.statics.loadHistory = async function(sessionId) {
   try {
-    const session = await mongoose.model('Session').findOne({ sessionId });
+    // Add timeout to prevent hanging if MongoDB is slow/unresponsive
+    const sessionPromise = mongoose.model('Session').findOne({ sessionId });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Session lookup timeout')), 5000)
+    );
+    
+    const session = await Promise.race([sessionPromise, timeoutPromise]);
+    
     if (!session) return [];
     
     // Filter by isPopped: false for active context only
     // NO LIMIT - let the pruning logic handle context management
+    // Use .lean() to return plain JS objects, avoiding Mongoose virtual id conflicts
     const messages = await this.find({ 
       session: session._id, 
       'metadata.isPopped': false 
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: 1 }).lean();
     
-    return messages.reverse().map(msg => {
+    return messages.map(msg => {
       const result = {
         role: msg.role,
         content: msg.content || ""
       };
       
       if (msg.toolCalls && msg.toolCalls.length > 0) {
-        result.toolCalls = msg.toolCalls;
+        // Clean up tool calls to ensure correct structure without Mongoose artifacts
+        result.toolCalls = msg.toolCalls.map(tc => ({
+          id: tc.id,
+          type: tc.type,
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments
+          }
+        }));
       }
       
       if (msg.toolCallId) {
@@ -94,7 +110,10 @@ messageSchema.statics.loadHistory = async function(sessionId) {
       return result;
     });
   } catch (error) {
-    console.error('Error loading message history:', error);
+    // Only log the error if it's not a timeout (timeout is expected when no session exists)
+    if (!error.message.includes('timeout')) {
+      console.error('Error loading message history:', error);
+    }
     return [];
   }
 };
@@ -309,4 +328,5 @@ messageSchema.statics.getFullHistory = async function(sessionId) {
 
 const Message = mongoose.model('Message', messageSchema);
 
+// Re-export the model with all static methods properly attached
 export default Message;

@@ -49,7 +49,7 @@ class StorageManager {
       this.currentStorage = this.jsonStorage;
       this.jsonStorage.setDebug(debug);
       console.log('📁 Using JSON file storage');
-    } else if (this.storageType === 'no-memory' || this.storageType === 'no_memory') {
+    } else if (this.storageType === 'no-memory' || this.storageType === 'noMemory') {
       this.currentStorage = this.noMemoryStorage;
       this.noMemoryStorage.setDebug(debug);
       console.log('🚫 Using No Memory storage (no persistence)');
@@ -69,47 +69,52 @@ class StorageManager {
   }
 
   /**
-   * Load chat history
+   * Load chat history for a specific session
+   * @param {string} sessionId - Session ID to load history for
    */
-  async loadHistory() {
+  async loadHistory(sessionId) {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
     
-    return await this.currentStorage.loadHistory();
+    return await this.currentStorage.loadHistory(sessionId);
   }
 
   /**
-   * Save chat history
+   * Save chat history for a specific session
+   * @param {string} sessionId - Session ID to save history for
+   * @param {Array} messages - Messages to save
    */
-  async saveHistory(messages) {
+  async saveHistory(sessionId, messages) {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
     
-    return await this.currentStorage.saveHistory(messages);
+    return await this.currentStorage.saveHistory(sessionId, messages);
   }
 
   /**
-   * Clear chat history
+   * Clear chat history for a specific session
+   * @param {string} sessionId - Session ID to clear history for
    */
-  async clearHistory() {
+  async clearHistory(sessionId) {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
     
-    return await this.currentStorage.clearHistory();
+    return await this.currentStorage.clearHistory(sessionId);
   }
 
   /**
-   * Get storage statistics
+   * Get storage statistics for a specific session
+   * @param {string} sessionId - Session ID to get stats for
    */
-  async getStats() {
+  async getStats(sessionId) {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
     
-    return await this.currentStorage.getStats();
+    return await this.currentStorage.getStats(sessionId);
   }
 
   /**
