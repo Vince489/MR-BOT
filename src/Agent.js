@@ -32,7 +32,8 @@ export class Agent extends EventEmitter {
     if (!config.systemPrompt) throw new Error("systemPrompt is required");
     
     // Store session ID for chat history management
-    this.sessionId = config.sessionId || this._generateSessionId();
+    // Prioritize environment variable SESSION_ID, then config, then generate new
+    this.sessionId = process.env.SESSION_ID || config.sessionId || this._generateSessionId();
 
     this.client = new Mistral({
       apiKey: config.apiKey,
@@ -464,6 +465,62 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     hint += "Maintain consistency with this state in your progress updates.";
 
     return hint;
+  }
+
+  /**
+   * Parse markdown progress string to Map
+   * @param {string} progress - Markdown checklist format progress string
+   * @returns {Map<string, boolean>} - Progress state map
+   * @private
+   */
+  _parseProgressToMap(progress) {
+    const progressState = new Map();
+    
+    if (!progress || typeof progress !== 'string') {
+      return progressState;
+    }
+
+    const lines = progress.split('\n');
+    const checklistPattern = /^\s*-\s*\[\s*(x| )\s*\]\s*(.+)$/;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const match = trimmed.match(checklistPattern);
+      if (match) {
+        const status = match[1].toLowerCase() === 'x';
+        const description = match[2].trim();
+        // Normalize the description for consistent key matching
+        const normalizedKey = description.toLowerCase().replace(/\s+/g, '_');
+        progressState.set(normalizedKey, status);
+      }
+    }
+
+    return progressState;
+  }
+
+  /**
+   * Merge multiple progress states into one
+   * @param {Array<Map<string, boolean>>} progressStates - Array of progress state maps
+   * @returns {Map<string, boolean>} - Merged progress state
+   * @private
+   */
+  _mergeProgressStates(progressStates) {
+    const mergedState = new Map();
+
+    // Process states in order, with later states taking precedence
+    for (const state of progressStates) {
+      for (const [key, isCompleted] of state.entries()) {
+        // If already completed, keep it completed (sticky)
+        if (mergedState.has(key) && mergedState.get(key)) {
+          continue;
+        }
+        mergedState.set(key, isCompleted);
+      }
+    }
+
+    return mergedState;
   }
 
   /**

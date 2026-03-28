@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { calculatorTool } from '../tools/calculatorTool.js';
 import { dateTimeTool } from '../tools/dateTimeTool.js';
 import { thoughtTool } from '../tools/thoughtTool.js';
+import { dbsearchTool } from '../tools/dbsearchTool.js';
 
 dotenv.config();
 
@@ -66,8 +67,9 @@ async function main() {
     apiKey: process.env.MISTRAL_API_KEY,
     systemPrompt: SYSTEM_PROMPT,
     storageType: 'mongodb', // Just specify the storage type
-    tools: [thoughtTool, calculatorTool, dateTimeTool],
-    debug: false
+    tools: [thoughtTool, calculatorTool, dateTimeTool, dbsearchTool],
+    debug: false,
+    sessionId: process.env.SESSION_ID // Use session ID from environment
   });
 
   // Load existing history
