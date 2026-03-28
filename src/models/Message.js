@@ -6,6 +6,7 @@ const Schema = mongoose.Schema;
  * THE MESSAGE SCHEMA
  * Designed for Mistral/OpenAI compatibility.
  * Links to a 'Session' document to group conversations.
+ * Enhanced with vector search capabilities using 1024-dimensional embeddings.
  */
 const messageSchema = new Schema({
   // Reference to the parent session
@@ -26,6 +27,17 @@ const messageSchema = new Schema({
     type: String, 
     default: "" 
   }, 
+  // --- VECTOR SEARCH ENHANCEMENTS ---
+  // 1024 dimensions for Mistral-embed model (CORRECTED from 1536)
+  embedding: {
+    type: [Number], 
+    required: false,
+    index: false // Atlas Vector Index defined in UI
+  },
+  // Victor optimization: short summary for token efficiency
+  summary: { type: String },
+  // -----------------------------------
+  
   // Mistral/OpenAI toolCalls format
   toolCalls: [{
     id: { type: String, required: true },
@@ -58,7 +70,6 @@ messageSchema.index({ session: 1, createdAt: -1 });
  * Used by syncContextWindow and loadHistory to efficiently filter by isPopped
  */
 messageSchema.index({ session: 1, 'metadata.isPopped': 1, createdAt: -1 });
-
 
 /**
  * STATIC METHODS
@@ -324,6 +335,115 @@ messageSchema.statics.getFullHistory = async function(sessionId) {
     console.error('Error loading full message history:', error);
     return [];
   }
+};
+
+// 8. Embedding Management: Generate and store embeddings for messages
+messageSchema.statics.generateEmbedding = async function(messageId, content, role) {
+  try {
+    // Import embedding service - use dynamic import to avoid circular dependencies
+    const { generateEmbedding } = await import('../services/embeddingService.js');
+    
+    // Apply semantic filtering
+    if (!this.shouldEmbed({ content, role })) {
+      console.log(`Skipping embedding for semantic junk: ${content.substring(0, 30)}...`);
+      return false;
+    }
+    
+    const vector = await generateEmbedding(content);
+    await this.findByIdAndUpdate(messageId, { embedding: vector });
+    return true;
+  } catch (error) {
+    console.error(`Failed to embed message ${messageId}:`, error);
+    return false;
+  }
+};
+
+// 9. Semantic Filtering: Prevent embedding noise that reduces search accuracy
+messageSchema.statics.shouldEmbed = function(message) {
+  // Skip tool messages without human-readable content
+  if (message.role === 'tool' && !message.content) return false;
+  
+  // Skip very short messages that don't contain meaningful information
+  if (message.content && message.content.length < 20) return false;
+  
+  // Skip common noise patterns
+  const noisePatterns = ['ok', 'hello', 'hi', 'thanks', 'thank you', 'bye'];
+  if (message.content && noisePatterns.some(pattern => 
+    message.content.toLowerCase().includes(pattern))) return false;
+  
+  return true;
+};
+
+// 10. Semantic Search: Perform vector search across message history
+messageSchema.statics.semanticSearch = async function(params) {
+  const {
+    query,
+    limit = 5,
+    sessionId = null,
+    dateRange = null,
+    roleFilter = null
+  } = params;
+
+  try {
+    // Import embedding service - use dynamic import to avoid circular dependencies
+    const { generateEmbedding } = await import('../services/embeddingService.js');
+    
+    // Generate query vector
+    const queryVector = await generateEmbedding(query);
+
+    // Build aggregation pipeline
+    const pipeline = [
+      {
+        $vectorSearch: {
+          index: "vector_index",
+          path: "embedding",
+          queryVector: queryVector,
+          numCandidates: limit * 10,
+          limit: limit,
+          filter: this.buildFilters(sessionId, dateRange, roleFilter)
+        }
+      },
+      {
+        $lookup: {
+          from: "sessions",
+          localField: "session",
+          foreignField: "_id",
+          as: "sessionInfo"
+        }
+      },
+      {
+        $project: {
+          content: 1,
+          role: 1,
+          score: { $meta: "vectorSearchScore" },
+          sessionId: "$sessionInfo.sessionId",
+          sessionTopic: "$sessionInfo.topic",
+          createdAt: 1
+        }
+      }
+    ];
+
+    return await this.aggregate(pipeline);
+  } catch (error) {
+    console.error('Error during semantic search:', error);
+    return [];
+  }
+};
+
+// 11. Helper function to build filters for semantic search
+messageSchema.statics.buildFilters = function(sessionId, dateRange, roleFilter) {
+  const filter = {};
+  
+  if (sessionId) filter.session = sessionId;
+  if (roleFilter) filter.role = roleFilter;
+  if (dateRange) {
+    filter.createdAt = {
+      $gte: dateRange.start,
+      $lte: dateRange.end
+    };
+  }
+  
+  return filter;
 };
 
 const Message = mongoose.model('Message', messageSchema);

@@ -10,9 +10,10 @@ Based on the existing documentation and architecture:
 
 ### Current State
 - MongoDB schemas for `Message` and `Session` models
-- Embedding service using Mistral's API (`generateEmbedding`)
+- Embedding service using Mistral's API (`generateEmbedding`) with 1024 dimensions
 - Existing search tools that need semantic enhancement
-- Plans to integrate Atlas Vector Search to replace Pinecone
+- AdvancedMemory model with 1536 dimensions (needs standardization)
+- Environment configured with MISTRAL_API_KEY and MongoDB connection
 
 ### Target Capabilities
 1. **Semantic Search**: Natural language queries converted to vectors
@@ -20,6 +21,7 @@ Based on the existing documentation and architecture:
 3. **Hybrid Filtering**: Combine semantic search with traditional filters
 4. **Session Summaries**: Quick overviews before deep diving
 5. **Context-Aware Results**: Messages with full session context
+6. **Progress Tracking Integration**: Leverage existing taskProgress system
 
 ## Implementation Architecture
 
