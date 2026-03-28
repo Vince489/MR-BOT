@@ -72,6 +72,36 @@ messageSchema.index({ session: 1, createdAt: -1 });
 messageSchema.index({ session: 1, 'metadata.isPopped': 1, createdAt: -1 });
 
 /**
+ * ENHANCED VECTOR SEARCH INDEX CONFIGURATION
+ * Optimized for tiered search with Victor/Sentinel mode support
+ * 
+ * Note: This index should be created in MongoDB Atlas UI with these exact settings:
+ * - Type: Vector Search
+ * - Path: embedding
+ * - Dimensions: 1024
+ * - Similarity: cosine
+ * - Filters: session, role, metadata.isPopped
+ */
+messageSchema.statics.createOptimizedVectorIndex = function() {
+  console.log('💡 [MESSAGE SCHEMA] Vector index configuration ready for Atlas UI');
+  console.log('💡 [MESSAGE SCHEMA] Create index with these settings in Atlas:');
+  console.log('  - Type: Vector Search');
+  console.log('  - Path: embedding');
+  console.log('  - Dimensions: 1024');
+  console.log('  - Similarity: cosine');
+  console.log('  - Filters: session, role, metadata.isPopped');
+  
+  return {
+    indexName: 'vector_index',
+    type: 'vectorSearch',
+    path: 'embedding',
+    dimensions: 1024,
+    similarity: 'cosine',
+    filters: ['session', 'role', 'metadata.isPopped']
+  };
+};
+
+/**
  * STATIC METHODS
  */
 

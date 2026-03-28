@@ -13,6 +13,11 @@ const sessionSchema = new Schema({
   topic: { type: String, trim: true }, // e.g., "Fixing MongoDB Retry Logic"
   summary: { type: String },         // Paragraph summarizing the whole session
   sessionEmbedding: { type: [Number] }, // 1024 dimensions for Mistral-embed model
+  category: { 
+    type: String, 
+    enum: ['technical', 'general', 'triage'],
+    default: 'general'
+  }, // Enhanced categorization for better search
   // -----------------------------------
   
   modelConfig: {
@@ -20,6 +25,36 @@ const sessionSchema = new Schema({
     contextLimit: { type: Number, default: 131072 }
   }
 }, { timestamps: true });
+
+/**
+ * ENHANCED SESSION VECTOR INDEX CONFIGURATION
+ * Optimized for session-level semantic search with category filtering
+ * 
+ * Note: This index should be created in MongoDB Atlas UI with these exact settings:
+ * - Type: Vector Search
+ * - Path: sessionEmbedding
+ * - Dimensions: 1024
+ * - Similarity: cosine
+ * - Filters: lastActivity, category
+ */
+sessionSchema.statics.createOptimizedSessionIndex = function() {
+  console.log('💡 [SESSION SCHEMA] Session vector index configuration ready for Atlas UI');
+  console.log('💡 [SESSION SCHEMA] Create index with these settings in Atlas:');
+  console.log('  - Type: Vector Search');
+  console.log('  - Path: sessionEmbedding');
+  console.log('  - Dimensions: 1024');
+  console.log('  - Similarity: cosine');
+  console.log('  - Filters: lastActivity, category');
+  
+  return {
+    indexName: 'session_vector_index',
+    type: 'vectorSearch',
+    path: 'sessionEmbedding',
+    dimensions: 1024,
+    similarity: 'cosine',
+    filters: ['lastActivity', 'category']
+  };
+};
 
 // Create model for session
 const Session = mongoose.model('Session', sessionSchema);

@@ -5,15 +5,20 @@ import { Mistral } from "@mistralai/mistralai";
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { retry } from '../pinecone/retry.js'; // Import the retry utility
+import { retry } from '../../pinecone/retry.js'; // Import the retry utility
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+dotenv.config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
 
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 const MISTRAL_API_BASE = process.env.MISTRAL_API_BASE || 'https://api.mistral.ai/v1';
+
+console.log('🔍 [EMBEDDING SERVICE] Loading environment variables...');
+console.log('   .env path:', path.join(__dirname, '..', '..', '.env'));
+console.log('   MISTRAL_API_KEY loaded:', !!MISTRAL_API_KEY);
+console.log('   MISTRAL_API_BASE:', MISTRAL_API_BASE);
 
 if (!MISTRAL_API_KEY) {
   console.error("CRITICAL: MISTRAL_API_KEY is not set in environment variables. Embedding service will not work.");

@@ -7,7 +7,7 @@ import { thoughtTool } from '../tools/thoughtTool.js';
 
 dotenv.config();
 
-// node src/scripts/chat-4.js 
+// node src/scripts/chat-4
 
 const SYSTEM_PROMPT = `You are Victor Stylus, a highly advanced AI co-developer powered by mistral-medium-2508.
 

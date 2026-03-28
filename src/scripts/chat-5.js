@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { calculatorTool } from '../tools/calculatorTool.js';
 import { dateTimeTool } from '../tools/dateTimeTool.js';
 import { thoughtTool } from '../tools/thoughtTool.js';
+import { chatHistorySearchTool } from '../tools/chatHistorySearchTool.js';
 
 dotenv.config();
 
@@ -48,12 +49,54 @@ const SYSTEM_PROMPT = `You are Victor Stylus, a highly advanced AI co-developer 
 4. Use record_thought again if needed for post-tool analysis
 5. Finally, provide your response to the user
 
+## AVAILABLE TOOLS
+
+You have access to the following functions:
+
+### 1. record_thought
+**MANDATORY** - Use this tool before ANY response or action.
+- **Purpose**: Document your reasoning process
+- **Required fields**: step, hypothesis, plan
+- **Optional fields**: uncertainties, context, alternatives_considered, taskProgress
+- **Usage**: ALWAYS use this tool first when responding to user input
+
+### 2. calculator
+**Purpose**: Perform mathematical calculations
+- **Parameters**: 
+  - expression: String containing the mathematical expression to evaluate
+- **Example**: { "expression": "2 + 2 * 3" }
+
+### 3. date_time
+**Purpose**: Get current date and time information
+- **Parameters**:
+  - format: Optional string specifying the desired date/time format
+- **Example**: { "format": "YYYY-MM-DD HH:mm:ss" }
+
+### 4. chat_history_search
+**Purpose**: Search through conversation history using semantic search
+- **Parameters**:
+  - action: The type of search to perform ("semanticSearch", "sessionSearch", or "getMessageContext")
+  - query: The search query for semanticSearch
+  - sessionId: Session ID for sessionSearch
+  - messageId: Message ID for getMessageContext
+  - limit: Maximum number of results to return (default: 10)
+  - filters: Optional filters for date range, role, etc.
+- **Example**: { "action": "semanticSearch", "query": "previous discussions about AI", "limit": 5 }
+
+### Tool Usage Guidelines:
+- **ALWAYS** use record_thought FIRST before any other tool
+- Use calculator for complex mathematical operations
+- Use date_time when you need current date/time information
+- Use chat_history_search when the user asks about past conversations, wants to find specific topics, or needs context from previous interactions
+- When in doubt, use the chat_history_search tool to provide better context and more informed responses
+
 ### Additional Guidelines:
 - Be concise, accurate, and friendly
 - Think step by step and provide clear explanations
 - If you don't know something, say so rather than making things up
-- Use other tools (calculator, date/time) as needed, but ONLY AFTER recording your initial thoughts
+- Use tools as needed, but ONLY AFTER recording your initial thoughts
 - Maintain a continuous internal monologue using the thought tool
+- When users ask about past conversations or want to search for specific topics, proactively use the chat_history_search tool
 
 **Remember: Your thought process is your superpower. Use it systematically and without exception.**`;
 
@@ -66,7 +109,7 @@ async function main() {
     apiKey: process.env.MISTRAL_API_KEY,
     systemPrompt: SYSTEM_PROMPT,
     storageType: 'mongodb', // Just specify the storage type
-    tools: [thoughtTool, calculatorTool, dateTimeTool],
+    tools: [thoughtTool, calculatorTool, dateTimeTool, chatHistorySearchTool],
     debug: true, // Enable debug mode to see enhanced streaming features
     enableEvents: true // Enable event system for progress tracking
   });
@@ -262,9 +305,18 @@ function printHelp() {
   console.log('   ✅ Lightweight progress tracking');
   console.log('   ✅ Structured thought recording');
   console.log('   ✅ Atomic progress state merging');
+  console.log('   ✅ Chat history search tool (semantic search across conversations)');
   console.log('\n💡 IMPORTANT: This interface enforces mandatory thought process.');
   console.log('   The AI will ALWAYS use the thought tool before responding.');
   console.log('   This ensures systematic, well-reasoned responses.\n');
+  console.log('🔍 CHAT HISTORY SEARCH:');
+  console.log('   The agent has access to a powerful search tool that can:');
+  console.log('   • Find messages by keywords or topics');
+  console.log('   • Search across all your conversation history');
+  console.log('   • Use semantic search to find related content');
+  console.log('   • Filter by session, role, or date range');
+  console.log('   • Retrieve conversation context around specific messages');
+  console.log('   Simply ask the agent to search your chat history for specific topics!');
 }
 
 main().catch(error => {
