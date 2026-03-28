@@ -4,6 +4,8 @@ import { CircuitBreaker } from "./CircuitBreaker.js";
 import { LoopDetector } from "./LoopDetector.js";
 import { ResponseProcessor } from "./ResponseProcessor.js";
 import { ToolManager } from "./ToolManager.js";
+import { StreamingResponseProcessor } from "./StreamingResponseProcessor.js";
+import { ToolExecutionManager } from "./ToolExecutionManager.js";
 import { StorageManager } from "./storage/StorageManager.js";
 
 /**
@@ -273,96 +275,106 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
    * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
    */
   async executeStream(history, userInput, onChunk) {
-    // 1. Prepare initial message state
+    // Initialize enhanced components if not already done
+    if (!this.streamingProcessor) {
+      this.streamingProcessor = new StreamingResponseProcessor(this);
+      this.streamingProcessor.setMode('standard');
+    }
+
+    if (!this.toolExecutionManager) {
+      this.toolExecutionManager = new ToolExecutionManager();
+      this.toolExecutionManager.initialize(this);
+      this.toolExecutionManager.setMode('standard');
+    }
+
     const messages = [
       { role: "system", content: this.systemPrompt },
       ...(history || []),
       { role: "user", content: userInput }
     ];
 
-    let continueStreaming = true;
-    let fullResponse = "";
+    const stream = await this.client.chat.stream({
+      model: this.model,
+      messages: messages,
+      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
+    });
 
-    while (continueStreaming) {
-      const stream = await this.client.chat.stream({
-        model: this.model,
-        messages: messages,
-        ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
-      });
+    return this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
+  }
 
-      let assistantMessage = { role: "assistant", content: "", toolCalls: [] };
-      const toolCallAccumulator = new Map();
-
-      // Consume the stream
-      for await (const chunk of stream) {
-        const delta = chunk.data?.choices?.[0]?.delta || chunk.choices?.[0]?.delta;
-        if (!delta) continue;
-
-        if (delta.content) {
-          assistantMessage.content += delta.content;
-          if (onChunk) onChunk(delta.content);
-          fullResponse += delta.content;
-        }
-
-        const streamingToolCalls = delta.toolCalls;
-        if (streamingToolCalls) {
-          for (const tc of streamingToolCalls) {
-            const index = tc.index ?? 0;
-            if (!toolCallAccumulator.has(index)) {
-              toolCallAccumulator.set(index, { id: tc.id || "", function: { name: "", arguments: "" } });
-            }
-            const current = toolCallAccumulator.get(index);
-            if (tc.id) current.id = tc.id;
-            if (tc.function?.name) current.function.name += tc.function.name;
-            if (tc.function?.arguments) current.function.arguments += tc.function.arguments;
-          }
-        }
-      }
-
-      // Finalize tool calls
-      const toolCalls = Array.from(toolCallAccumulator.values()).map((tc, i) => ({
-        id: tc.id || `call_${Date.now()}_${i}`,
-        type: "function",
-        function: {
-          name: tc.function?.name || "",
-          arguments: tc.function?.arguments || ""
-        }
-      }));
-
-      if (toolCalls.length > 0) {
-        // MANDATORY: Add the assistant's toolCall message to history BEFORE the tool results
-        assistantMessage.toolCalls = toolCalls;
-        // Keep tool-call assistant messages API-compliant
-        assistantMessage.content = assistantMessage.content || "";
-        messages.push(assistantMessage);
-
-        // Capture progress intent (from existing logic)
-        this._captureProgressIntent({ choices: [{ message: assistantMessage }] });
-
-        // Execute tools using ToolManager
-        const toolResults = [];
-        for (const tc of toolCalls) {
-          const result = await this.toolManager.executeToolCall(tc, [], userInput, 0, null);
-          toolResults.push(result);
-        }
-
-        // Add the tool results to the history
-        messages.push(...toolResults);
-
-        // The loop will now repeat, sending the history (including tool results) back to Mistral
-      } else {
-        // No tool calls, we are finished
-        if (assistantMessage.content) {
-          messages.push({ role: "assistant", content: assistantMessage.content });
-        }
-        continueStreaming = false;
-      }
+  /**
+   * Execute batch processing for high-volume operations (Sentinel mode)
+   * @param {Array} history - Conversation history
+   * @param {string} userInput - User input message
+   * @param {string} [batchType] - Type of batch processing (e.g., 'triage')
+   * @param {Function} [onChunk] - Optional callback for each text token
+   * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
+   */
+  async executeBatch(history, userInput, batchType = 'triage', onChunk) {
+    // Initialize enhanced components if not already done
+    if (!this.streamingProcessor) {
+      this.streamingProcessor = new StreamingResponseProcessor(this);
     }
 
-    return {
-      response: fullResponse,
-      fullMessages: messages
-    };
+    if (!this.toolExecutionManager) {
+      this.toolExecutionManager = new ToolExecutionManager();
+      this.toolExecutionManager.initialize(this);
+    }
+
+    // Set Sentinel mode
+    this.streamingProcessor.setMode('sentinel', batchType);
+    this.toolExecutionManager.setMode('sentinel');
+
+    const messages = [
+      { role: "system", content: this.systemPrompt },
+      ...(history || []),
+      { role: "user", content: userInput }
+    ];
+
+    const stream = await this.client.chat.stream({
+      model: this.model,
+      messages: messages,
+      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
+    });
+
+    return this.streamingProcessor.processBatch(stream, messages, batchType, onChunk);
+  }
+
+  /**
+   * Execute Victor mode with structured monologue and memory integration
+   * @param {Array} history - Conversation history
+   * @param {string} userInput - User input message
+   * @param {Function} [onChunk] - Optional callback for each text token
+   * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
+   */
+  async executeVictor(history, userInput, onChunk) {
+    // Initialize enhanced components if not already done
+    if (!this.streamingProcessor) {
+      this.streamingProcessor = new StreamingResponseProcessor(this);
+    }
+
+    if (!this.toolExecutionManager) {
+      this.toolExecutionManager = new ToolExecutionManager();
+      this.toolExecutionManager.initialize(this);
+    }
+
+    // Set Victor mode
+    this.streamingProcessor.setMode('victor');
+    this.toolExecutionManager.setMode('victor');
+
+    const messages = [
+      { role: "system", content: this.systemPrompt },
+      ...(history || []),
+      { role: "user", content: userInput }
+    ];
+
+    const stream = await this.client.chat.stream({
+      model: this.model,
+      messages: messages,
+      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
+    });
+
+    return this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
   }
 
   /**
@@ -419,69 +431,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     });
   }
 
-  /**
-   * Parse progress string into Map-based state with resilient parsing
-   * @param {string} progress - Markdown checklist format progress update
-   * @returns {Map<string, boolean>} - Parsed progress state
-   * @private
-   */
-  _parseProgressToMap(progress) {
-    const state = new Map();
-
-    if (!progress || typeof progress !== 'string') {
-      return state;
-    }
-
-    // Resilient line-by-line parsing that handles whitespace and casing variations
-    const lines = progress.split('\n');
-
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-
-      // Skip empty lines
-      if (trimmedLine === '') continue;
-
-      // Flexible regex that handles various whitespace and casing
-      // Matches: - [x] Task description or - [ ] Task description
-      const match = trimmedLine.match(/^\s*-\s*\[\s*([xX ])\s*\]\s*(.+)$/);
-
-      if (match) {
-        const isCompleted = match[1].toLowerCase() === 'x';
-        const taskDescription = match[2].trim();
-
-        if (taskDescription) {
-          // Normalize task description for consistent key matching
-          const normalizedKey = taskDescription.toLowerCase().trim();
-          state.set(normalizedKey, isCompleted);
-        }
-      }
-    }
-
-    return state;
-  }
-
-  /**
-   * Merge multiple progress states atomically (solves parallelism race condition)
-   * Completed status is sticky - once a task is marked complete, it stays complete
-   * @param {Array<Map<string, boolean>>} progressStates - Array of progress states from concurrent tool calls
-   * @returns {Map<string, boolean>} - Merged progress state
-   * @private
-   */
-  _mergeProgressStates(progressStates) {
-    const mergedState = new Map();
-
-    // Process all states to build the merged result
-    for (const state of progressStates) {
-      for (const [taskKey, isCompleted] of state.entries()) {
-        // Atomic merge: if any state marks a task as completed, it stays completed
-        const currentStatus = mergedState.get(taskKey);
-        const newStatus = currentStatus || isCompleted; // Sticky completion
-        mergedState.set(taskKey, newStatus);
-      }
-    }
-
-    return mergedState;
-  }
 
   /**
    * Get current state hint for tool parameter description
@@ -804,5 +753,32 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     }
     await this._ensureStorageInitialized();
     return await this.storageManager.getStatus(targetSessionId);
+  }
+
+  /**
+   * Count tokens in messages using a simple approximation
+   * @param {Array} messages - Array of message objects
+   * @returns {number} - Estimated token count
+   */
+  countMessageTokens(messages) {
+    // Simple token approximation: ~4 characters per token for English text
+    // This is a rough estimate - in production, you'd use js-tiktoken for accuracy
+    let totalChars = 0;
+    
+    for (const message of messages) {
+      if (message.content) {
+        totalChars += message.content.length;
+      }
+      if (message.toolCalls) {
+        for (const toolCall of message.toolCalls) {
+          if (toolCall.function?.arguments) {
+            totalChars += toolCall.function.arguments.length;
+          }
+        }
+      }
+    }
+    
+    // Rough approximation: 4 characters per token
+    return Math.ceil(totalChars / 4);
   }
 }

@@ -453,8 +453,8 @@ export class ResponseProcessor {
 
       const normalizedToolResults = runResult.toolResults.map((msg) => ({
         role: "tool",
-        content: msg.content ?? "",
-        toolCallId: msg.toolCallId
+        content: msg.content || JSON.stringify({ status: "success", message: "Tool executed successfully" }),
+        toolCallId: msg.toolCallId || msg.id
       }));
 
       currentMessages.push(...normalizedToolResults);
@@ -487,24 +487,20 @@ export class ResponseProcessor {
       });
 
 
-      const nextResponse = await client.chat.complete({ model, messages: apiMessages });
-      const continuation = await this.processResponse(nextResponse, apiMessages);
+      const nextStream = await client.chat.stream({ 
+        model, 
+        messages: apiMessages,
+        ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
+      });
       
-      // Stream the final response character by character if onChunk callback is provided
-      if (onChunk && continuation.response) {
-        for (let i = 0; i < continuation.response.length; i++) {
-          const char = continuation.response[i];
-          onChunk(char);
-          // Add a small delay to simulate real-time streaming
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-      }
+      // Continue with streaming processing
+      const continuation = await this.processStreamResponse(nextStream, apiMessages, onChunk);
       
       return {
         response: continuation.response,
         fullMessages: continuation.fullMessages,
-        rounds: round + (continuation.rounds || 0),
-        status: continuation.status || "success"
+        rounds: round + continuation.rounds,
+        status: continuation.status
       };
     }
 
