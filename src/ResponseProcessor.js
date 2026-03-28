@@ -15,6 +15,44 @@ export class ResponseProcessor {
     this.debug = agent.debug || false;
   }
 
+  /**
+   * Normalize a message object for API consumption.
+   * Filters invalid roles and normalizes assistant/tool payloads.
+   * @param {Array} messages
+   * @returns {Array}
+   */
+  _sanitizeMessagesForApi(messages) {
+    const validRoles = new Set(['system', 'user', 'assistant', 'tool']);
+    return (messages || []).map((msg) => {
+      if (!msg || typeof msg !== 'object') return null;
+      let role = typeof msg.role === 'string' ? msg.role.trim().toLowerCase() : null;
+      if (!role) {
+        if (msg.toolCallId) role = 'tool';
+        else if (msg.toolCalls) role = 'assistant';
+        else if (msg.content !== undefined) role = 'assistant';
+      }
+      if (!validRoles.has(role)) {
+        if (this.debug) console.warn(`⚠️ Skipping invalid message role: ${String(msg.role)}`);
+        return null;
+      }
+      const sanitized = { role, content: msg.content ?? '' };
+      if (role === 'assistant' && Array.isArray(msg.toolCalls)) {
+        sanitized.toolCalls = msg.toolCalls.map((tc) => ({
+          id: tc.id || `call_${Date.now()}`,
+          type: tc.type || 'function',
+          function: {
+            name: tc.function?.name || '',
+            arguments: tc.function?.arguments || ''
+          }
+        }));
+      }
+      if (role === 'tool') {
+        if (msg.toolCallId) sanitized.toolCallId = msg.toolCallId;
+      }
+      return sanitized;
+    }).filter(Boolean);
+  }
+
   // ---------------------------------------------------------------------------
   // Tool validation & execution
   // ---------------------------------------------------------------------------
@@ -335,7 +373,8 @@ export class ResponseProcessor {
       this.updateTaskProgress();
 
       // Prepare for next round
-      currentResponse = await client.chat.complete({ model, messages: currentMessages });
+      const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+      currentResponse = await client.chat.complete({ model, messages: apiMessages });
 
       if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
       round++;

@@ -710,7 +710,11 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       return;
     }
     await this._ensureStorageInitialized();
-    await this.storageManager.saveHistory(targetSessionId, messages);
+    const validMessages = (messages || []).filter(msg => msg && typeof msg.role === 'string');
+    if (validMessages.length !== (messages || []).length) {
+      console.warn('Filtered invalid messages before saving history.');
+    }
+    await this.storageManager.saveHistory(targetSessionId, validMessages);
   }
 
   /**

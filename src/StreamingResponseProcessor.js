@@ -30,6 +30,44 @@ export class StreamingResponseProcessor extends EventEmitter {
     this.memoryMode = false;
     this.victorMode = false;
     this.sentinelMode = false;
+
+    // API message sanitization helper to prevent invalid role payloads
+    this.validRoles = new Set(['system', 'user', 'assistant', 'tool']);
+  }
+
+  _normalizeToolCall(tc) {
+    return {
+      id: tc.id || `call_${Date.now()}`,
+      type: tc.type || 'function',
+      function: {
+        name: tc.function?.name || '',
+        arguments: tc.function?.arguments || ''
+      }
+    };
+  }
+
+  _sanitizeMessagesForApi(messages) {
+    return (messages || []).map((msg) => {
+      if (!msg || typeof msg !== 'object') return null;
+      let role = typeof msg.role === 'string' ? msg.role.trim().toLowerCase() : null;
+      if (!role) {
+        if (msg.toolCallId) role = 'tool';
+        else if (msg.toolCalls) role = 'assistant';
+        else if (msg.content !== undefined) role = 'assistant';
+      }
+      if (!this.validRoles.has(role)) {
+        if (this.debug) console.warn(`⚠️ Skipping invalid message role in stream payload: ${String(msg.role)}`);
+        return null;
+      }
+      const normalized = { role, content: msg.content ?? '' };
+      if (role === 'assistant' && Array.isArray(msg.toolCalls)) {
+        normalized.toolCalls = msg.toolCalls.map(this._normalizeToolCall);
+      }
+      if (role === 'tool') {
+        if (msg.toolCallId) normalized.toolCallId = msg.toolCallId;
+      }
+      return normalized;
+    }).filter(Boolean);
   }
 
   /**
@@ -183,10 +221,11 @@ export class StreamingResponseProcessor extends EventEmitter {
         throw new Error("ToolExecutionManager not initialized");
       }
 
+      const toolActions = [];
       const runResult = await toolExecutionManager.executeToolCalls(
-        assistantMessage.toolCalls, 
-        currentMessages, 
-        this.agent.userInput || "", 
+        assistantMessage.toolCalls,
+        toolActions,
+        this.agent.userInput || "",
         true, // parallel execution
         null // no abort signal
       );
@@ -232,16 +271,10 @@ export class StreamingResponseProcessor extends EventEmitter {
       this.updateTaskProgress();
 
       // Prepare for next round - sanitize messages for API compliance
-      const sanitizedMessages = currentMessages.map(msg => {
-        const clean = { role: msg.role, content: msg.content || "" };
-        if (msg.toolCalls) clean.toolCalls = msg.toolCalls;
-        if (msg.toolCallId) clean.toolCallId = msg.toolCallId;
-        return clean;
-      });
-
+      const apiMessages = this._sanitizeMessagesForApi(currentMessages);
       currentStream = await client.chat.stream({
         model,
-        messages: sanitizedMessages,
+        messages: apiMessages,
         ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
       });
 
