@@ -9,8 +9,8 @@ import { ToolExecutionManager } from "./ToolExecutionManager.js";
 import { StorageManager } from "./storage/StorageManager.js";
 
 /**
- * Simplified Agent class - MVP version with Circuit Breaker Pattern
- * Core functionality for interacting with Mistral API with enhanced loop detection
+ * Simplified Agent class - Core functionality for interacting with Mistral API
+ * Supports two execution modes: Streaming and Non-Streaming
  */
 export class Agent extends EventEmitter {
   /**
@@ -18,6 +18,7 @@ export class Agent extends EventEmitter {
    * @param {Object} config - Configuration object
    * @param {string} config.apiKey - Mistral API key
    * @param {string} [config.model="mistral-medium-2505"] - Model to use
+   * @param {number} [config.temperature=0.5] - Temperature for response generation
    * @param {string} config.systemPrompt - System instructions for the agent
    * @param {Array} [config.tools=[]] - Array of tool definitions
    * @param {boolean} [config.parallelToolCalls=true] - Execute multiple tool calls concurrently using Promise.all()
@@ -49,6 +50,7 @@ export class Agent extends EventEmitter {
     });
 
 this.model = config.model || "mistral-medium-2505";
+    this.temperature = config.temperature !== undefined ? config.temperature : 0.5;
 this.tools = config.tools || [];
 this.systemPrompt = (config.tools && config.tools.length > 0)
   ? this._injectProgressTrackingProtocol(config.systemPrompt)
@@ -268,7 +270,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
   /**
    * Execute a streaming request with tool management
-   * Handles the recursive tool-calling loop to avoid message order errors
    * @param {Array} history - Conversation history
    * @param {string} userInput - User input message
    * @param {Function} [onChunk] - Optional callback for each text token
@@ -278,13 +279,11 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     // Initialize enhanced components if not already done
     if (!this.streamingProcessor) {
       this.streamingProcessor = new StreamingResponseProcessor(this);
-      this.streamingProcessor.setMode('standard');
     }
 
     if (!this.toolExecutionManager) {
       this.toolExecutionManager = new ToolExecutionManager();
       this.toolExecutionManager.initialize(this);
-      this.toolExecutionManager.setMode('standard');
     }
 
     const messages = [
@@ -302,80 +301,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     return this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
   }
 
-  /**
-   * Execute batch processing for high-volume operations (Sentinel mode)
-   * @param {Array} history - Conversation history
-   * @param {string} userInput - User input message
-   * @param {string} [batchType] - Type of batch processing (e.g., 'triage')
-   * @param {Function} [onChunk] - Optional callback for each text token
-   * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
-   */
-  async executeBatch(history, userInput, batchType = 'triage', onChunk) {
-    // Initialize enhanced components if not already done
-    if (!this.streamingProcessor) {
-      this.streamingProcessor = new StreamingResponseProcessor(this);
-    }
-
-    if (!this.toolExecutionManager) {
-      this.toolExecutionManager = new ToolExecutionManager();
-      this.toolExecutionManager.initialize(this);
-    }
-
-    // Set Sentinel mode
-    this.streamingProcessor.setMode('sentinel', batchType);
-    this.toolExecutionManager.setMode('sentinel');
-
-    const messages = [
-      { role: "system", content: this.systemPrompt },
-      ...(history || []),
-      { role: "user", content: userInput }
-    ];
-
-    const stream = await this.client.chat.stream({
-      model: this.model,
-      messages: messages,
-      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
-    });
-
-    return this.streamingProcessor.processBatch(stream, messages, batchType, onChunk);
-  }
-
-  /**
-   * Execute Victor mode with structured monologue and memory integration
-   * @param {Array} history - Conversation history
-   * @param {string} userInput - User input message
-   * @param {Function} [onChunk] - Optional callback for each text token
-   * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
-   */
-  async executeVictor(history, userInput, onChunk) {
-    // Initialize enhanced components if not already done
-    if (!this.streamingProcessor) {
-      this.streamingProcessor = new StreamingResponseProcessor(this);
-    }
-
-    if (!this.toolExecutionManager) {
-      this.toolExecutionManager = new ToolExecutionManager();
-      this.toolExecutionManager.initialize(this);
-    }
-
-    // Set Victor mode
-    this.streamingProcessor.setMode('victor');
-    this.toolExecutionManager.setMode('victor');
-
-    const messages = [
-      { role: "system", content: this.systemPrompt },
-      ...(history || []),
-      { role: "user", content: userInput }
-    ];
-
-    const stream = await this.client.chat.stream({
-      model: this.model,
-      messages: messages,
-      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
-    });
-
-    return this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
-  }
 
   /**
    * Enhance tool definitions to include taskProgress parameter and generate proper Mistral format
