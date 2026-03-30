@@ -5,67 +5,49 @@ import { calculatorTool } from '../tools/calculatorTool.js';
 import { dateTimeTool } from '../tools/dateTimeTool.js';
 import { thoughtTool } from '../tools/thoughtTool.js';
 import { dbsearchTool } from '../tools/dbsearchTool.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 dotenv.config();
 
-// node src/scripts/chat-4.js 
+// node src/scripts/chat-4 
 
-const SYSTEM_PROMPT = `You are Victor Stylus, a highly advanced AI co-developer powered by mistral-medium-2508.
-
-## MANDATORY THOUGHT PROCESS PROTOCOL
-
-**CRITICAL: Before responding to ANY user input, you MUST use the record_thought tool to externalize your reasoning process. This is non-negotiable and mandatory for every single interaction.**
-
-### Thought Process Requirements:
-1. **ALWAYS USE THE THOUGHT TOOL FIRST** - Before any response, tool call, or action
-2. **Complete Reasoning Documentation** - Use all relevant thought steps:
-   - Pre-tool reasoning (initial analysis)
-   - Post-tool analysis (after tool results)
-   - Final decision (before responding)
-   - Error handling (if tools fail)
-   - Plan adjustment (if needed)
-   - Context evaluation (considering history)
-3. **Structured Format** - Include:
-   - Clear hypothesis about user's intent
-   - Detailed plan with specific steps
-   - Any uncertainties or ambiguities
-   - Relevant context from conversation history
-   - Alternative approaches considered
-
-### Enforcement:
-- **NO EXCEPTIONS**: Every user message requires a thought record
-- **NO SHORTCUTS**: Always use the full thought process
-- **NO DIRECT RESPONSES**: Never respond to user input without first recording thoughts
-- **FAILURE TO COMPLY**: Will result in incomplete or incorrect responses
-
-### Example Workflow:
-1. User asks question
-2. IMMEDIATELY use record_thought tool with:
-   - Step: "Pre-tool reasoning"
-   - Hypothesis: What you think the user wants
-   - Plan: How you'll respond/what tools you'll use
-   - Context: Relevant history
-3. Process user's request using appropriate tools
-4. Use record_thought again if needed for post-tool analysis
-5. Finally, provide your response to the user
-
-### Additional Guidelines:
-- Be concise, accurate, and friendly
-- Think step by step and provide clear explanations
-- If you don't know something, say so rather than making things up
-- Use other tools (calculator, date/time) as needed, but ONLY AFTER recording your initial thoughts
-- Maintain a continuous internal monologue using the thought tool
-
-**Remember: Your thought process is your superpower. Use it systematically and without exception.**`;
+async function loadSystemPrompt() {
+  try {
+    const personaPath = path.join(process.cwd(), 'src', 'docs', 'persona-4.md');
+    const content = await fs.readFile(personaPath, 'utf-8');
+    
+    // Get current timestamp using the Date/Time Tool for consistency
+    const currentTimestamp = await dateTimeTool.handler({
+      action: 'getCurrentTime',
+      format: 'iso'
+    });
+    
+    // Replace the placeholder with actual timestamp
+    const systemPrompt = content.replace(
+      '[Dynamic timestamp from Date/Time Tool]',
+      currentTimestamp
+    );
+    
+    // Use the entire content as the system prompt - markdown formatting is fine for LLMs
+    return systemPrompt;
+  } catch (error) {
+    console.error('Failed to load persona-4.md:', error.message);
+    process.exit(1);
+  }
+}
 
 async function main() {
   console.log('🤖 AUTOBOT Chat Interface v4.0 - MANDATORY THOUGHT PROCESS');
   console.log('=========================================================\n');
 
+  // Load the system prompt from persona-4.md
+  const systemPrompt = await loadSystemPrompt();
+
   // Initialize agent with MongoDB storage and tools including thought tool
   const agent = new Agent({
     apiKey: process.env.MISTRAL_API_KEY,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: systemPrompt,
     storageType: 'mongodb', // Just specify the storage type
     tools: [thoughtTool, calculatorTool, dateTimeTool, dbsearchTool],
     debug: false,

@@ -316,20 +316,27 @@ async function listSessions(params = {}) {
 /**
  * Gets detailed session information
  */
-async function getSessionInfo(params) {
+async function getSessionInfo(params, context = {}) {
   try {
     const { sessionId } = params;
     
-    if (!sessionId) {
+    // If no sessionId provided, try to use current session from context
+    let targetSessionId = sessionId;
+    if (!targetSessionId && context.agent && context.agent.sessionId) {
+      targetSessionId = context.agent.sessionId;
+      console.log(`🔍 [DBSEARCH TOOL] Using current session ID from agent context: ${targetSessionId}`);
+    }
+    
+    if (!targetSessionId) {
       return {
-        error: 'sessionId parameter is required for getSessionInfo'
+        error: 'sessionId parameter is required for getSessionInfo. No current session available.'
       };
     }
 
-    const resolvedSessionId = await resolveSessionId(sessionId);
+    const resolvedSessionId = await resolveSessionId(targetSessionId);
     if (!resolvedSessionId) {
       return {
-        error: `Session with sessionId "${sessionId}" not found. Use listSessions to see available sessions.`
+        error: `Session with sessionId "${targetSessionId}" not found. Use listSessions to see available sessions.`
       };
     }
 
@@ -451,7 +458,7 @@ async function searchByTime(params) {
 /**
  * Main handler function for the dbsearch tool
  */
-async function handleDbSearch(params) {
+async function handleDbSearch(params, context = {}) {
   try {
     const { action, task_progress, ...restParams } = params;
     
@@ -471,7 +478,7 @@ async function handleDbSearch(params) {
         return listSessions(restParams);
       
       case 'getSessionInfo':
-        return getSessionInfo(restParams);
+        return getSessionInfo(restParams, context);
       
       case 'searchByTime':
         return searchByTime(restParams);
