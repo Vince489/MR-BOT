@@ -92,7 +92,7 @@ messageSchema.statics.createOptimizedVectorIndex = function() {
   console.log('  - Filters: session, role, metadata.isPopped');
   
   return {
-    indexName: 'vector_index',
+    indexName: 'vectorIndex',
     type: 'vectorSearch',
     path: 'embedding',
     dimensions: 1024,
@@ -425,7 +425,7 @@ messageSchema.statics.semanticSearch = async function(params) {
     const pipeline = [
       {
         $vectorSearch: {
-          index: "vector_index",
+          index: "vectorIndex",
           path: "embedding",
           queryVector: queryVector,
           numCandidates: limit * 10,

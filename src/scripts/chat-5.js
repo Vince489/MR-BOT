@@ -57,7 +57,7 @@ You have access to the following functions:
 **MANDATORY** - Use this tool before ANY response or action.
 - **Purpose**: Document your reasoning process
 - **Required fields**: step, hypothesis, plan
-- **Optional fields**: uncertainties, context, alternatives_considered, taskProgress
+- **Optional fields**: uncertainties, context, alternativesConsidered, taskProgress
 - **Usage**: ALWAYS use this tool first when responding to user input
 
 ### 2. calculator

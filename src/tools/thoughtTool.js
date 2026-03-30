@@ -54,7 +54,7 @@ export const thoughtTool = {
           type: "string",
           description: "Relevant context from conversation history informing this reasoning."
         },
-        alternatives_considered: {
+        alternativesConsidered: {
           type: "array",
           items: { type: "string" },
           description: "Alternative approaches that were considered but rejected."
@@ -98,7 +98,7 @@ export const thoughtTool = {
       plan, 
       uncertainties = [], 
       context = "", 
-      alternatives_considered = [],
+      alternativesConsidered = [],
       userInput = "",
       agentId = "mistral-medium-2508",
       metadata = {}
@@ -128,7 +128,7 @@ export const thoughtTool = {
         plan,
         uncertainties,
         context,
-        alternatives_considered,
+        alternativesConsidered,
         userInput,
         agentId,
         metadata: {

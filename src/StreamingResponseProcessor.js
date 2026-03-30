@@ -187,7 +187,7 @@ export class StreamingResponseProcessor extends EventEmitter {
         
         // Memory integration: Commit context overflow insight
         if (this.memoryMode) {
-          await this.afterDecision({ content: "Context limit reached" }, { round, type: 'context_overflow' });
+          await this.afterDecision({ content: "Context limit reached" }, { round, type: 'contextOverflow' });
         }
         
         return { 
@@ -204,7 +204,7 @@ export class StreamingResponseProcessor extends EventEmitter {
         
         // Memory integration: Commit max rounds insight
         if (this.memoryMode) {
-          await this.afterDecision({ content: `Maximum rounds (${maxRounds}) reached` }, { round, type: 'max_rounds' });
+          await this.afterDecision({ content: `Maximum rounds (${maxRounds}) reached` }, { round, type: 'maxRounds' });
         }
         
         return { 
@@ -235,7 +235,7 @@ export class StreamingResponseProcessor extends EventEmitter {
         
         // Memory integration: Commit circuit breaker insight
         if (this.memoryMode) {
-          await this.afterDecision({ content: "Circuit breaker protection activated" }, { round, type: 'circuit_breaker' });
+          await this.afterDecision({ content: "Circuit breaker protection activated" }, { round, type: 'circuitBreaker' });
         }
         
         return { 
@@ -256,7 +256,7 @@ export class StreamingResponseProcessor extends EventEmitter {
         
         // Memory integration: Commit loop detection insight
         if (this.memoryMode) {
-          await this.afterDecision({ content: "Loop detected: Agent stopped to prevent infinite recursion" }, { round, type: 'loop_detected' });
+          await this.afterDecision({ content: "Loop detected: Agent stopped to prevent infinite recursion" }, { round, type: 'loopDetected' });
         }
         
         return { 
@@ -315,7 +315,7 @@ export class StreamingResponseProcessor extends EventEmitter {
     // Record structured thought for batch start
     await this.recordStructuredThought(
       `Starting batch processing for ${batchType}. Optimizing for high-volume operations with parallel tool execution.`,
-      'batch_start'
+      'batchStart'
     );
 
     // Memory integration: Recall relevant batch processing memories
@@ -326,7 +326,7 @@ export class StreamingResponseProcessor extends EventEmitter {
     // Record structured thought for batch completion
     await this.recordStructuredThought(
       `Completed batch processing for ${batchType}. Result status: ${result.status}. Rounds: ${result.rounds}.`,
-      'batch_completion'
+      'batchCompletion'
     );
 
     // Memory integration: Commit batch processing insights
@@ -354,8 +354,8 @@ export class StreamingResponseProcessor extends EventEmitter {
       // Use recordThought tool to recall relevant memories
       if (this.agent.handlers?.recordThought) {
         const recallResult = await this.agent.handlers.recordThought({
-          content: `Recall relevant memories for: ${topics.join(', ')}`,
-          type: 'memory_recall',
+        content: `Recall relevant memories for: ${topics.join(', ')}`,
+        type: 'memoryRecall',
           topics: topics
         });
 
@@ -482,8 +482,8 @@ export class StreamingResponseProcessor extends EventEmitter {
 
     // Increase score for completion events
     if (context.type === 'completion') score += 2;
-    if (context.type === 'context_overflow') score += 3;
-    if (context.type === 'loop_detected') score += 4;
+    if (context.type === 'contextOverflow') score += 3;
+    if (context.type === 'loopDetected') score += 4;
 
     // Increase score for batch processing
     if (context.batchType) score += 2;

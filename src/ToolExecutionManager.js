@@ -155,7 +155,7 @@ export class ToolExecutionManager extends EventEmitter {
 
       // Memory integration: Record structured thought before execution
       if (this.memoryMode) {
-        await this._recordExecutionThought(name, validatedArgs, 'before_execution');
+        await this._recordExecutionThought(name, validatedArgs, 'beforeExecution');
       }
 
       const result = await handler(validatedArgs, { 
@@ -176,7 +176,7 @@ export class ToolExecutionManager extends EventEmitter {
 
       // Memory integration: Record structured thought after execution
       if (this.memoryMode) {
-        await this._recordExecutionThought(name, validatedArgs, 'after_execution', result, duration);
+        await this._recordExecutionThought(name, validatedArgs, 'afterExecution', result, duration);
       }
 
       if (this.enableEvents) {
@@ -334,7 +334,7 @@ export class ToolExecutionManager extends EventEmitter {
 
         // Store current call in Pinecone for future comparisons
         await this.pineconeClient.upsert([{
-          id: `tool_call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `toolCall_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           vector: vector,
           metadata: {
             toolName: toolCall.function.name,
@@ -533,16 +533,16 @@ export class ToolExecutionManager extends EventEmitter {
    * Record structured thought before/after tool execution
    * @param {string} toolName - Name of the tool
    * @param {Object} args - Tool arguments
-   * @param {string} phase - Execution phase ('before_execution' or 'after_execution')
-   * @param {Object} [result] - Tool result (for after_execution)
-   * @param {number} [duration] - Execution duration (for after_execution)
+   * @param {string} phase - Execution phase ('beforeExecution' or 'afterExecution')
+   * @param {Object} [result] - Tool result (for afterExecution)
+   * @param {number} [duration] - Execution duration (for afterExecution)
    * @private
    */
   async _recordExecutionThought(toolName, args, phase, result, duration) {
     try {
       const thought = {
         content: this._generateThoughtContent(toolName, args, phase, result, duration),
-        type: 'execution_thought',
+        type: 'executionThought',
         mode: this.victorMode ? 'victor' : 'sentinel',
         metadata: {
           toolName,
@@ -598,7 +598,7 @@ export class ToolExecutionManager extends EventEmitter {
     try {
       const insight = {
         content: `Tool "${toolName}" failed after ${retryCount + 1} attempts. Error: ${error.message}`,
-        type: 'error_insight',
+        type: 'errorInsight',
         importance: this._calculateErrorImportance(error, retryCount),
         metadata: {
           toolName,
@@ -632,7 +632,7 @@ export class ToolExecutionManager extends EventEmitter {
     try {
       const insight = {
         content: `Semantic loop detected for tools: ${loopResult.tools.join(', ')}. Preventing infinite recursion.`,
-        type: 'semantic_loop_insight',
+        type: 'semanticLoopInsight',
         importance: 9, // High importance
         metadata: {
           tools: loopResult.tools,

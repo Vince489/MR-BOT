@@ -47,7 +47,7 @@ sessionSchema.statics.createOptimizedSessionIndex = function() {
   console.log('  - Filters: lastActivity, category');
   
   return {
-    indexName: 'session_vector_index',
+    indexName: 'sessionVectorIndex',
     type: 'vectorSearch',
     path: 'sessionEmbedding',
     dimensions: 1024,
@@ -104,7 +104,7 @@ ${messages.map(m => `${m.role}: ${m.content}`).join('\n')}`;
       body: JSON.stringify({
         model: 'mistral-small',
         messages: [{ role: 'user', content: summaryPrompt }],
-        max_tokens: 200
+        maxTokens: 200
       })
     });
     
@@ -151,8 +151,8 @@ Session.sessionSearch = async function(params) {
 
     const pipeline = [
       {
-        $vectorSearch: {
-          index: "session_vector_index",
+          $vectorSearch: {
+          index: "sessionVectorIndex",
           path: "sessionEmbedding",
           queryVector: queryVector,
           numCandidates: limit * 5,

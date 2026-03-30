@@ -10,9 +10,9 @@ function arrayLimit(val) {
 const thoughtSchema = new mongoose.Schema({
   session: { type: Schema.Types.ObjectId, ref: 'Session', required: true, index: true },
   timestamp: { type: Date, default: Date.now, index: true },
-  message_reference: {
-    chat_message_id: { type: Schema.Types.ObjectId, ref: 'Message' },
-    chat_timestamp: { type: Date }
+  messageReference: {
+    chatMessageId: { type: Schema.Types.ObjectId, ref: 'Message' },
+    chatTimestamp: { type: Date }
   },
   step: { type: String, required: true, enum: [
     'Pre-tool reasoning',
@@ -26,7 +26,7 @@ const thoughtSchema = new mongoose.Schema({
   plan: { type: [String], required: true, validate: [arrayLimit, 'Plan must have at least 1 step'] },
   uncertainties: { type: [String], default: [] },
   context: { type: String, maxlength: 5000 },
-  alternatives_considered: { type: [String], default: [] },
+  alternativesConsidered: { type: [String], default: [] },
   userInput: { type: String, maxlength: 5000 },
   agentId: { type: String, required: true },
   metadata: {
