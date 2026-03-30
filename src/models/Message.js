@@ -66,6 +66,12 @@ const messageSchema = new Schema({
 messageSchema.index({ session: 1, createdAt: -1 });
 
 /**
+ * TEXT INDEX FOR FULL-TEXT SEARCH
+ * Enables efficient $text search operations in dbsearchTool
+ */
+messageSchema.index({ content: "text" });
+
+/**
  * OPTIMIZED INDEX FOR ACTIVE CONTEXT QUERIES
  * Used by syncContextWindow and loadHistory to efficiently filter by isPopped
  */

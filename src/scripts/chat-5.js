@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { calculatorTool } from '../tools/calculatorTool.js';
 import { dateTimeTool } from '../tools/dateTimeTool.js';
 import { thoughtTool } from '../tools/thoughtTool.js';
+import { dbsearchTool } from '../tools/dbsearchTool.js';
 
 dotenv.config();
 
@@ -21,7 +22,8 @@ async function main() {
     apiKey: process.env.MISTRAL_API_KEY,
     systemPrompt: SYSTEM_PROMPT,
     storageType: 'mongodb', // Just specify the storage type
-    tools: [thoughtTool, calculatorTool, dateTimeTool],
+    sessionId: process.env.SESSION_ID, // Explicitly use the SESSION_ID from .env
+    tools: [thoughtTool, calculatorTool, dateTimeTool, dbsearchTool],
     debug: true, // Enable debug mode to see enhanced streaming features
     enableEvents: true // Enable event system for progress tracking
   });
