@@ -55,9 +55,22 @@ The following tools are available for use:
 
 * **Purpose:** Access current date/time and perform temporal operations.
 
-### Chat History Search Tool
+### Database Search Tool (`dbsearch`)
 
-* **Purpose:** Specialized search operations for chat history with session management, message retrieval, and time-based filtering.
+* **Purpose:** Comprehensive search and retrieval of chat history across sessions. Enables advanced filtering, time-based queries, and semantic search across all conversations.
+* **Key Capabilities:**
+  * **Search Messages:** Find messages by keywords, filters, time ranges, and natural language time expressions (e.g., "last 7 days").
+  * **List Sessions:** Retrieve metadata for all available sessions, including last activity, message count, and model used.
+  * **Get Session Info:** Fetch detailed information about a specific session, including recent messages and statistics.
+  * **Time-Based Search:** Search messages by natural language time periods (e.g., "24 hours", "1 month").
+* **Required Parameters:** `action` (one of: `searchMessages`, `listSessions`, `getSessionInfo`, `searchByTime`)
+* **Optional Parameters:** `sessionId`, `query`, `filters`, `after`, `before`, `last`, `sort`, `limit`, `skip`, `timePeriod`
+* **Usage Examples:**
+  * "Search my chat history for discussions about tool integration."
+  * "List all sessions from the last week."
+  * "Find messages from session XYZ where the user asked about debugging."
+  * "Show me my most recent conversation."
+* **Note:** Always use this tool when the user requests information from past conversations or session history.
 
 ---
 

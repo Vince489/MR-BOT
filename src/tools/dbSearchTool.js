@@ -461,7 +461,7 @@ async function searchByTime(params) {
 async function handleDbSearch(params, context = {}) {
   try {
     const { action, taskProgress, ...restParams } = params;
-    
+
     if (!action) {
       return {
         error: 'action parameter is required. Available actions: searchMessages, listSessions, getSessionInfo, searchByTime'
@@ -470,19 +470,27 @@ async function handleDbSearch(params, context = {}) {
 
     console.log(`🔍 [DBSEARCH TOOL] Executing action: ${action}`);
 
+    // Use the SESSION_ID from .env if no sessionId is provided
+    if (!restParams.sessionId) {
+      const envSessionId = process.env.SESSION_ID;
+      if (envSessionId) {
+        restParams.sessionId = envSessionId;
+      }
+    }
+
     switch (action) {
       case 'searchMessages':
         return searchMessages(restParams);
-      
+
       case 'listSessions':
         return listSessions(restParams);
-      
+
       case 'getSessionInfo':
         return getSessionInfo(restParams, context);
-      
+
       case 'searchByTime':
         return searchByTime(restParams);
-      
+
       default:
         return {
           error: `Unknown action: ${action}. Available actions: searchMessages, listSessions, getSessionInfo, searchByTime`
