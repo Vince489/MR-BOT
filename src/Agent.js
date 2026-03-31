@@ -519,197 +519,279 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
   }
 
   /**
-   * Validate progress format with enhanced checking
-   * @param {string} progress - Progress string to validate
-   * @returns {boolean} - True if valid, false otherwise
+   * Decomposes a broad objective into a structured task graph
+   * @param {string} objective - The broad objective to decompose
+   * @returns {Promise<TaskGraph>} The created task graph
    */
-  validateProgressFormat(progress) {
-    if (!progress || typeof progress !== 'string') {
-      return false;
-    }
+  async decomposeTask(objective) {
+    // Step 1: Analyze the objective and generate initial task structure
+    const analysis = await this._analyzeObjective(objective);
 
-    // Enhanced validation that handles multi-line progress updates
-    // Each line should be a valid checklist item
-    const lines = progress.split('\n');
-    const checklistPattern = /^\s*-\s*\[\s*(x| )\s*\]\s*.+$/;
+    // Step 2: Create and validate the task graph
+    this.taskGraph = await this._createTaskGraph(analysis);
 
-    return lines.every(line => {
-      // Skip empty lines
-      if (line.trim() === '') return true;
-      return checklistPattern.test(line);
+    // Step 3: Convert to progress tracking format
+    this.currentProgress = this.taskGraph.toMarkdown();
+    this.updateProgress(this.currentProgress, 'system', 'plan-created');
+
+    // Emit event with the complete plan
+    this.emit('task-plan-created', {
+      objective,
+      taskGraph: this.taskGraph,
+      status: this.taskGraph.getStatus()
     });
+
+    return this.taskGraph;
   }
 
   /**
-   * Update progress with enhanced validation and integration
-   * @param {string} progress - Markdown checklist format progress update
-   * @param {string} [toolCall] - Optional tool call that triggered this update
-   * @param {string} [status] - Status of the update (success, failed, etc.)
-   * @returns {boolean} - True if update was successful, false otherwise
-   */
-  updateProgress(progress, toolCall = null, status = 'success') {
-    if (!this.validateProgressFormat(progress)) {
-      console.warn('Invalid progress format. Expected markdown checklist format.');
-      // Record progress update failure for circuit breaker
-      if (this.circuitBreaker) {
-        this.circuitBreaker.recordFailure('progress-update', 'Invalid progress format');
-      }
-      this.emit('progress-update-failed', {
-        progress: progress,
-        reason: 'Invalid progress format',
-        timestamp: Date.now()
-      });
-      return false;
-    }
-
-    this.currentProgress = progress;
-    this.progressHistory.push({
-      progress: progress,
-      timestamp: Date.now(),
-      toolCall: toolCall,
-      status: status
-    });
-
-    // Keep only last 15 progress updates
-    if (this.progressHistory.length > 15) {
-      this.progressHistory = this.progressHistory.slice(-15);
-    }
-
-    this.emit('progress-update', {
-      progress: progress,
-      toolCall: toolCall,
-      status: status,
-      timestamp: Date.now()
-    });
-
-    return true;
-  }
-
-  /**
-   * Initialize storage manager lazily on first use
+   * Analyzes an objective and generates a task decomposition plan
+   * @param {string} objective - The objective to analyze
+   * @returns {Promise<Object>} Analysis result with task structure
    * @private
    */
-  async _ensureStorageInitialized() {
-    if (!this.storageManager) {
-      throw new Error('Storage not configured. Pass storageType in Agent constructor.');
-    }
-    
-    if (!this.storageManager.initialized) {
-      await this.storageManager.initialize(this.storageType || 'no-memory', this.debug);
-    }
-  }
+  async _analyzeObjective(objective) {
+    // Use LLM to analyze the objective and suggest sub-tasks
+    const response = await this.client.chat.complete({
+      model: this.model,
+      messages: [
+        {
+          role: "system",
+          content: `You are a task decomposition expert. Analyze the following objective and break it down into logical sub-tasks with dependencies.
 
-  /**
-   * Generate a unique session ID
-   * @returns {string} - Generated session ID
-   * @private
-   */
-  _generateSessionId() {
-    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  }
+          **Objective**: ${objective}
 
-  /**
-   * Load chat history from storage (lazy initialization)
-   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
-   * @returns {Promise<Array>} - Chat history messages
-   */
-  async loadHistory(sessionId) {
-    const targetSessionId = sessionId || this.sessionId;
-    if (!this.storageManager) {
-      return [];
-    }
-    await this._ensureStorageInitialized();
-    return await this.storageManager.loadHistory(targetSessionId);
-  }
+          **Instructions**:
+          1. Break this down into the smallest logical units of work
+          2. Identify dependencies between tasks
+          3. Specify any tools required for each task
+          4. Estimate task priority (1-5, where 1 is highest priority)
+          5. Include any potential risks or considerations
 
-  /**
-   * Save chat history to storage (lazy initialization)
-   * @param {Array} messages - Messages to save
-   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
-   * @returns {Promise<void>}
-   */
-  async saveHistory(messages, sessionId) {
-    const targetSessionId = sessionId || this.sessionId;
-    if (!this.storageManager) {
-      return;
-    }
-    await this._ensureStorageInitialized();
-    const validMessages = (messages || []).filter(msg => msg && typeof msg.role === 'string');
-    if (validMessages.length !== (messages || []).length) {
-      console.warn('Filtered invalid messages before saving history.');
-    }
-    await this.storageManager.saveHistory(targetSessionId, validMessages);
-  }
-
-  /**
-   * Clear chat history from storage (lazy initialization)
-   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
-   * @returns {Promise<void>}
-   */
-  async clearHistory(sessionId) {
-    const targetSessionId = sessionId || this.sessionId;
-    if (!this.storageManager) {
-      return;
-    }
-    await this._ensureStorageInitialized();
-    await this.storageManager.clearHistory(targetSessionId);
-  }
-
-  /**
-   * Get storage statistics (lazy initialization)
-   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
-   * @returns {Promise<Object>} - Storage statistics
-   */
-  async getStorageStats(sessionId) {
-    const targetSessionId = sessionId || this.sessionId;
-    if (!this.storageManager) {
-      return { type: 'none', initialized: false };
-    }
-    await this._ensureStorageInitialized();
-    return await this.storageManager.getStats(targetSessionId);
-  }
-
-  /**
-   * Get current storage status (lazy initialization)
-   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
-   * @returns {Promise<Object>} - Storage status
-   */
-  async getStorageStatus(sessionId) {
-    const targetSessionId = sessionId || this.sessionId;
-    if (!this.storageManager) {
-      return { type: 'none', initialized: false };
-    }
-    await this._ensureStorageInitialized();
-    return await this.storageManager.getStatus(targetSessionId);
-  }
-
-  /**
-   * Count tokens in messages using a simple approximation
-   * @param {Array} messages - Array of message objects
-   * @returns {number} - Estimated token count
-   */
-  countMessageTokens(messages) {
-    // Simple token approximation: ~4 characters per token for English text
-    // This is a rough estimate - in production, you'd use js-tiktoken for accuracy
-    let totalChars = 0;
-    
-    for (const message of messages) {
-      if (message.content) {
-        totalChars += message.content.length;
-      }
-      if (message.toolCalls) {
-        for (const toolCall of message.toolCalls) {
-          if (toolCall.function?.arguments) {
-            totalChars += toolCall.function.arguments.length;
-          }
+          **Response Format**:
+          Respond with JSON in this exact format:
+          {
+            "subTasks": [
+              {
+                "id": "unique-identifier",
+                "description": "Clear, specific task description",
+                "dependencies": ["id1", "id2"], // optional
+                "requiredTools": ["tool1", "tool2"], // optional
+                "priority": 1-5, // optional, default 3
+                "notes": "Any additional context" // optional
+              }
+            ],
+            "potentialRisks": ["risk1", "risk2"],
+            "suggestedApproach": "Brief explanation of the overall approach",
+            "estimatedComplexity": "low|medium|high"
+          }`
         }
-      }
+      ],
+      temperature: 0.3, // More deterministic for planning
+      response_format: { type: "json_object" }
+    });
+
+    try {
+      return JSON.parse(response.choices[0].message.content);
+    } catch (e) {
+      console.error("Failed to parse task analysis response:", e);
+      throw new Error("Invalid response format from task analysis");
     }
-    
-    // Rough approximation: 4 characters per token
-    return Math.ceil(totalChars / 4);
   }
 
+  /**
+   * Creates a task graph from analysis data
+   * @param {Object} analysis - Task analysis data
+   * @returns {Promise<TaskGraph>} Created task graph
+   * @private
+   */
+  async _createTaskGraph(analysis) {
+    const graph = new TaskGraph();
 
+    // Add all tasks to the graph
+    for (const task of analysis.subTasks) {
+      // Generate ID if not provided
+      const taskId = task.id || generateTaskId();
 
-}
+      try {
+        graph.addTask(
+          taskId,
+          task.description,
+          task.dependencies || []
+        );
+
+        // Set additional properties
+        const node = graph.nodes.get(taskId);
+        node.requiredTools = task.requiredTools || [];
+        node.priority = task.priority || 3;
+        if (task.notes) node.metadata.notes = task.notes;
+      } catch (e) {
+        console.error(`Failed to add task ${task.description}:`, e.message);
+        // Try to continue with other tasks
+      }
+    }
+
+    // Validate the complete graph
+    try {
+      graph.getExecutionOrder(); // This will throw if there are circular dependencies
+    } catch (e) {
+      console.error("Invalid task graph structure:", e.message);
+      throw new Error("Generated task plan contains circular dependencies");
+    }
+
+    // Emit event with the created graph
+    this.emit('task-graph-created', {
+      graph: graph.toJSON(),
+      analysis
+    });
+
+    return graph;
+  }
+
+  /**
+   * Executes tasks according to the current plan
+   * @param {Array} history - Conversation history
+   * @param {string} userInput - User input message
+   * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
+   */
+  async executeWithPlan(history, userInput) {
+    // If we don't have a plan yet, create one
+    if (!this.taskGraph) {
+      await this.decomposeTask(userInput);
+    }
+
+    // Get next executable tasks
+    const executableTasks = this.taskGraph.getExecutableTasks();
+
+    if (executableTasks.length === 0) {
+      // All tasks completed or no executable tasks
+      const status = this.taskGraph.getStatus();
+
+      if (status.isComplete) {
+        // All tasks completed successfully
+        const completionMessage = this._generateCompletionMessage();
+        return {
+          response: completionMessage,
+          fullMessages: [...(history || []), { role: "assistant", content: completionMessage }]
+        };
+      } else {
+        // No executable tasks but not all completed - some may have failed
+        const blockedMessage = this._generateBlockedMessage();
+        return {
+          response: blockedMessage,
+          fullMessages: [...(history || []), { role: "assistant", content: blockedMessage }]
+        };
+      }
+    }
+
+    // Focus on the highest priority executable task
+    const nextTaskId = this._selectNextTask(executableTasks);
+    const nextTask = this.taskGraph.getTask(nextTaskId);
+
+    // Update task status
+    nextTask.status = 'in-progress';
+    nextTask.updatedAt = new Date();
+    this.currentProgress = this.taskGraph.toMarkdown();
+
+    // Update progress tracking
+    this.updateProgress(this.currentProgress, 'system', 'task-started');
+
+    // Emit event for task started
+    this.emit('task-started', {
+      taskId: nextTaskId,
+      description: nextTask.description,
+      dependencies: nextTask.dependencies,
+      progress: this.currentProgress
+    });
+
+    try {
+      // Generate task-specific prompt
+      const taskPrompt = await this._generateTaskPrompt(nextTaskId);
+
+      const messages = [
+        { role: "system", content: this.systemPrompt },
+        ...(history || []),
+        { role: "user", content: taskPrompt }
+      ];
+
+      // Execute with tool support if needed
+      const response = await this.client.chat.complete({
+        model: this.model,
+        messages: messages,
+        ...(nextTask.requiredTools.length > 0 && { tools: this.toolManager.getApiTools() })
+      });
+
+      // Process the response
+      const result = await this.responseProcessor.processResponse(response, messages);
+
+      // Check if task was completed successfully
+      if (response.choices[0].message.tool_calls &&
+          response.choices[0].message.tool_calls.length > 0) {
+        // Task required tool calls - progress will be updated by tool execution
+        return result;
+      } else {
+        // Task completed without tool calls
+        return await this._handleCompletedTask(nextTaskId, result, response);
+      }
+    } catch (error) {
+      console.error(`Error executing task ${nextTaskId}:`, error);
+      return await this._handleTaskFailure(nextTaskId, error, history, userInput);
+    }
+  }
+
+  /**
+   * Selects the next task to execute from available tasks
+   * @param {Array<string>} taskIds - Array of executable task IDs
+   * @returns {string} Selected task ID
+   * @private
+   */
+  _selectNextTask(taskIds) {
+    if (taskIds.length === 0) return null;
+
+    // Get all task nodes
+    const tasks = taskIds.map(id => this.taskGraph.getTask(id));
+
+    // Sort by priority (lower number = higher priority) then by creation date
+    tasks.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+      return a.createdAt - b.createdAt;
+    });
+
+    return tasks[0].id;
+  }
+
+  /**
+   * Generates a task-specific prompt
+   * @param {string} taskId - Task ID
+   * @returns {Promise<string>} Task prompt
+   * @private
+   */
+  async _generateTaskPrompt(taskId) {
+    const node = this.taskGraph.getTask(taskId);
+    if (!node) throw new Error(`Task ${taskId} not found`);
+
+    // Get only direct dependencies' results for context
+    const dependencyContext = [];
+    for (const depId of node.dependencies) {
+      const depNode = this.taskGraph.getTask(depId);
+      if (depNode.result) {
+        dependencyContext.push(
+          `### ${depNode.description}\n` +
+          `**Status**: ${depNode.status}\n` +
+          `**Result**: ${JSON.stringify(depNode.result)}\n`
+        );
+      }
+    }
+
+    // Get current progress status
+    const status = this.taskGraph.getStatus();
+
+    return `
+    **Current Task**: ${node.description}
+    **Task ID**: ${taskId}
+    **Priority**: ${node.priority}
+    **Status**: ${status.completed}/${status.totalTasks} tasks completed
+
+    ${dependencyContext.length > 0 ? `**Dependency Results**:\n${dependencyContext.join('\n')
