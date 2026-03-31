@@ -794,4 +794,570 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     **Priority**: ${node.priority}
     **Status**: ${status.completed}/${status.totalTasks} tasks completed
 
-    ${dependencyContext.length > 0 ? `**Dependency Results**:\n${dependencyContext.join('\n')
+    ${dependencyContext.length > 0 ? `**Dependency Results**:\n${dependencyContext.join('\n')}\n` : ''}
+
+    **Available Tools**: ${node.requiredTools.length > 0 ? node.requiredTools.join(', ') : 'None specified'}
+
+    **Instructions**:
+    1. Focus ONLY on completing this specific task: "${node.description}"
+    2. Use the provided dependency results if needed
+    3. Use the required tools: [${node.requiredTools.join(', ') || 'none'}]
+    4. When completed:
+       - Store your result in a 'result' field in your response
+       - Include the complete updated task list in taskProgress
+       - Mark this task as completed with [x]
+    5. If you encounter issues:
+       - Explain the specific problem clearly
+       - Suggest alternative approaches if possible
+       - Propose new sub-tasks if the original plan needs adjustment
+
+    **Current Progress**:
+    ${this.taskGraph.toMarkdown()}
+
+    **Important**: Only work on this specific task. Do not attempt other tasks.
+    `;
+  }
+
+  /**
+   * Handles a completed task
+   * @param {string} taskId - Completed task ID
+   * @param {Object} result - Execution result
+   * @param {Object} response - Original response object
+   * @returns {Promise<{response: string, fullMessages: Array}>} Updated result
+   * @private
+   */
+  async _handleCompletedTask(taskId, result, response) {
+    const node = this.taskGraph.getTask(taskId);
+    if (!node) throw new Error(`Task ${taskId} not found`);
+
+    // Parse the result to extract task output and progress updates
+    const content = response.choices[0].message.content;
+    let taskResult = null;
+    let progressUpdate = null;
+
+    try {
+      // Try to parse as JSON if it looks like structured data
+      if (content.trim().startsWith('{')) {
+        const parsed = JSON.parse(content);
+        taskResult = parsed.result;
+        progressUpdate = parsed.taskProgress || content;
+      } else {
+        // Try to extract progress update from markdown
+        const progressMatch = content.match(/```(?:markdown)?\n([\s\S]*?)\n```/i);
+        if (progressMatch) {
+          progressUpdate = progressMatch[1];
+          // Remove progress from content for result
+          taskResult = content.replace(progressMatch[0], '').trim();
+        } else {
+          // Use entire content as result, no progress update
+          taskResult = content;
+        }
+      }
+    } catch (e) {
+      // If parsing fails, use raw content
+      taskResult = content;
+    }
+
+    // Update task status and result
+    node.status = 'completed';
+    node.result = taskResult;
+    node.updatedAt = new Date();
+
+    // Update progress if we have an explicit update
+    if (progressUpdate) {
+      this.updateProgress(progressUpdate, taskId, 'completed');
+      // Parse the update to sync with our graph
+      const lines = progressUpdate.split('\n');
+      for (const line of lines) {
+        const match = line.match(/^\-\s*\[([ x!>])\]\s*(.+)/);
+        if (match) {
+          const statusChar = match[1];
+          const description = match[2].trim();
+
+          // Find task by description (simplified - in real implementation would need better matching)
+          for (const [id, taskNode] of this.taskGraph.nodes) {
+            if (taskNode.description === description) {
+              taskNode.status =
+                statusChar === 'x' ? 'completed' :
+                statusChar === '!' ? 'failed' :
+                statusChar === '>' ? 'in-progress' : 'pending';
+              break;
+            }
+          }
+        }
+      }
+    } else {
+      // Update with current graph state
+      this.currentProgress = this.taskGraph.toMarkdown();
+      this.updateProgress(this.currentProgress, taskId, 'completed');
+    }
+
+    // Emit task completed event
+    this.emit('task-completed', {
+      taskId,
+      description: node.description,
+      result: node.result,
+      progress: this.currentProgress,
+      status: this.taskGraph.getStatus()
+    });
+
+    // Check if all tasks are completed
+    const status = this.taskGraph.getStatus();
+    if (status.isComplete) {
+      return {
+        response: this._generateCompletionMessage(),
+        fullMessages: result.fullMessages
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * Handles a failed task
+   * @param {string} taskId - Failed task ID
+   * @param {Error} error - Error object
+   * @param {Array} history - Conversation history
+   * @param {string} userInput - Original user input
+   * @returns {Promise<{response: string, fullMessages: Array}>} Recovery response
+   * @private
+   */
+  async _handleTaskFailure(taskId, error, history, userInput) {
+    const node = this.taskGraph.getTask(taskId);
+    if (!node) throw new Error(`Task ${taskId} not found`);
+
+    // Mark task as failed
+    node.status = 'failed';
+    node.failureReason = error.message;
+    node.updatedAt = new Date();
+
+    // Update progress
+    this.currentProgress = this.taskGraph.toMarkdown();
+    this.updateProgress(this.currentProgress, taskId, 'failed');
+
+    // Emit task failed event
+    this.emit('task-failed', {
+      taskId,
+      description: node.description,
+      error: error.message,
+      progress: this.currentProgress
+    });
+
+    try {
+      // Generate recovery options
+      const recoveryOptions = await this._generateRecoveryOptions(taskId, error);
+
+      if (recoveryOptions.shouldHalt) {
+        // Request human intervention
+        return {
+          response: this._generateHumanInterventionMessage(taskId, error, recoveryOptions),
+          fullMessages: [...(history || []), {
+            role: "assistant",
+            content: this._generateHumanInterventionMessage(taskId, error, recoveryOptions)
+          }]
+        };
+      } else {
+        // Apply automatic recovery
+        this.taskGraph.handleTaskFailure(taskId, error.message, recoveryOptions.recoveryOptions);
+
+        // Update progress after recovery
+        this.currentProgress = this.taskGraph.toMarkdown();
+        this.updateProgress(this.currentProgress, 'system', 'recovery-applied');
+
+        // Continue with next task
+        return this.executeWithPlan(history, userInput);
+      }
+    } catch (recoveryError) {
+      console.error("Failed to generate recovery options:", recoveryError);
+      return {
+        response: `Task failed and unable to generate recovery options: ${error.message}`,
+        fullMessages: [...(history || []), {
+          role: "assistant",
+          content: `Task failed and unable to generate recovery options: ${error.message}`
+        }]
+      };
+    }
+  }
+
+  /**
+   * Generates recovery options for a failed task
+   * @param {string} taskId - Failed task ID
+   * @param {Error} error - Error object
+   * @returns {Promise<Object>} Recovery options
+   * @private
+   */
+  async _generateRecoveryOptions(taskId, error) {
+    const node = this.taskGraph.getTask(taskId);
+
+    const response = await this.client.chat.complete({
+      model: this.model,
+      messages: [
+        {
+          role: "system",
+          content: `The task "${node.description}" failed with error: ${error.message}.
+
+          **Task Details**:
+          - ID: ${taskId}
+          - Description: ${node.description}
+          - Dependencies: ${node.dependencies.join(', ') || 'none'}
+          - Required Tools: ${node.requiredTools.join(', ') || 'none'}
+
+          **Current Graph Status**:
+          ${JSON.stringify(this.taskGraph.getStatus(), null, 2)}
+
+          **Available Tools**: ${JSON.stringify(this.tools.map(t => t.function.name), null, 2)}
+
+          **Instructions**:
+          1. Analyze why the task failed
+          2. Propose specific recovery options
+          3. Decide if human intervention is needed
+          4. If proposing new tasks, include all required details
+
+          **Response Format**:
+          {
+            "analysis": "Brief analysis of the failure",
+            "recoveryOptions": [
+              {
+                "id": "unique-identifier",
+                "description": "Clear recovery task description",
+                "dependencies": ["id1", "id2"], // optional
+                "requiredTools": ["tool1"], // optional
+                "justification": "Why this might work"
+              }
+            ],
+            "shouldHalt": boolean, // true if human help is needed
+            "recommendation": "Brief explanation of next steps"
+          }`
+        }
+      ],
+      temperature: 0.7, // More creative for recovery options
+      response_format: { type: "json_object" }
+    });
+
+    try {
+      return JSON.parse(response.choices[0].message.content);
+    } catch (e) {
+      console.error("Failed to parse recovery options:", e);
+      return {
+        analysis: "Failed to parse recovery options",
+        recoveryOptions: [],
+        shouldHalt: true,
+        recommendation: "Human intervention required due to parsing error"
+      };
+    }
+  }
+
+  /**
+   * Generates a completion message when all tasks are done
+   * @returns {string} Completion message
+   * @private
+   */
+  _generateCompletionMessage() {
+    const status = this.taskGraph.getStatus();
+    const completedTasks = this.taskGraph.getAllTasks()
+      .filter(task => task.status === 'completed');
+
+    let resultsSummary = completedTasks
+      .map(task => `• **${task.description}**: ${typeof task.result === 'string' ?
+          task.result.substring(0, 100) + (task.result.length > 100 ? '...' : '') :
+          JSON.stringify(task.result).substring(0, 100) + '...'}`)
+      .join('\n');
+
+    return `
+# ✅ All Tasks Completed Successfully!
+
+**Objective Achieved**: ${status.completed}/${status.totalTasks} tasks completed
+
+## Results Summary:
+${resultsSummary}
+
+## Task Execution Flow:
+\`\`\`mermaid
+${this.taskGraph.generateMermaidDiagram()}
+\`\`\`
+
+**Next Steps**: The complete objective has been achieved. Would you like to:
+1. Review any specific task results in more detail
+2. Save this work for future reference
+3. Start a new objective?
+`;
+  }
+
+  /**
+   * Generates a message when no tasks can be executed
+   * @returns {string} Blocked message
+   * @private
+   */
+  _generateBlockedMessage() {
+    const status = this.taskGraph.getStatus();
+    const failedTasks = this.taskGraph.getAllTasks()
+      .filter(task => task.status === 'failed');
+
+    let failedDetails = failedTasks.length > 0 ?
+      failedTasks.map(task => `• **${task.description}**: ${task.failureReason}`).join('\n') :
+      'No specific failure details available.';
+
+    return `
+# ⚠️ Task Execution Blocked
+
+**Status**: ${status.completed}/${status.totalTasks} tasks completed, ${failedTasks.length} failed
+
+## Failed Tasks:
+${failedDetails}
+
+## Current Task Graph:
+\`\`\`mermaid
+${this.taskGraph.generateMermaidDiagram()}
+\`\`\`
+
+**Issue**: No executable tasks available. This typically means:
+- Some tasks failed and blocked dependent tasks
+- The plan may need to be revised
+- Human intervention may be required
+
+**Suggested Actions**:
+1. Review the failed tasks above
+2. Provide guidance on how to proceed
+3. Or ask me to attempt automatic recovery
+`;
+  }
+
+  /**
+   * Generates a message requesting human intervention
+   * @param {string} taskId - Failed task ID
+   * @param {Error} error - Error object
+   * @param {Object} recoveryOptions - Recovery options
+   * @returns {string} Intervention message
+   * @private
+   */
+  _generateHumanInterventionMessage(taskId, error, recoveryOptions) {
+    const node = this.taskGraph.getTask(taskId);
+
+    let recoveryDetails = '';
+    if (recoveryOptions.recoveryOptions && recoveryOptions.recoveryOptions.length > 0) {
+      recoveryDetails = recoveryOptions.recoveryOptions
+        .map(opt => `• **${opt.description}**: ${opt.justification}`)
+        .join('\n');
+    }
+
+    return `
+# 🛑 Human Intervention Required
+
+**Failed Task**: ${node.description}
+**Error**: ${error.message}
+
+## Analysis:
+${recoveryOptions.analysis}
+
+## Proposed Recovery Options:
+${recoveryDetails || 'No automatic recovery options available.'}
+
+## Current Task Graph:
+\`\`\`mermaid
+${this.taskGraph.generateMermaidDiagram()}
+\`\`\`
+
+**Recommendation**: ${recoveryOptions.recommendation}
+
+**Please provide guidance on how to proceed**:
+- Should I try one of the proposed recovery options?
+- Would you like to modify the plan?
+- Or provide additional information to help resolve this?
+`;
+  }
+
+  /**
+   * Validate progress format with enhanced checking
+   * @param {string} progress - Progress string to validate
+   * @returns {boolean} - True if valid, false otherwise
+   */
+  validateProgressFormat(progress) {
+    if (!progress || typeof progress !== 'string') {
+      return false;
+    }
+
+    // Enhanced validation that handles multi-line progress updates
+    // Each line should be a valid checklist item
+    const lines = progress.split('\n');
+    const checklistPattern = /^\s*-\s*\[\s*(x| )\s*\]\s*.+$/;
+
+    return lines.every(line => {
+      // Skip empty lines
+      if (line.trim() === '') return true;
+      return checklistPattern.test(line);
+    });
+  }
+
+  /**
+   * Update progress with enhanced validation and integration
+   * @param {string} progress - Markdown checklist format progress update
+   * @param {string} [toolCall] - Optional tool call that triggered this update
+   * @param {string} [status] - Status of the update (success, failed, etc.)
+   * @returns {boolean} - True if update was successful, false otherwise
+   */
+  updateProgress(progress, toolCall = null, status = 'success') {
+    if (!this.validateProgressFormat(progress)) {
+      console.warn('Invalid progress format. Expected markdown checklist format.');
+      // Record progress update failure for circuit breaker
+      if (this.circuitBreaker) {
+        this.circuitBreaker.recordFailure('progress-update', 'Invalid progress format');
+      }
+      this.emit('progress-update-failed', {
+        progress: progress,
+        reason: 'Invalid progress format',
+        timestamp: Date.now()
+      });
+      return false;
+    }
+
+    this.currentProgress = progress;
+    this.progressHistory.push({
+      progress: progress,
+      timestamp: Date.now(),
+      toolCall: toolCall,
+      status: status
+    });
+
+    // Keep only last 15 progress updates
+    if (this.progressHistory.length > 15) {
+      this.progressHistory = this.progressHistory.slice(-15);
+    }
+
+    this.emit('progress-update', {
+      progress: progress,
+      toolCall: toolCall,
+      status: status,
+      timestamp: Date.now()
+    });
+
+    return true;
+  }
+
+  /**
+   * Initialize storage manager lazily on first use
+   * @private
+   */
+  async _ensureStorageInitialized() {
+    if (!this.storageManager) {
+      throw new Error('Storage not configured. Pass storageType in Agent constructor.');
+    }
+    
+    if (!this.storageManager.initialized) {
+      await this.storageManager.initialize(this.storageType || 'no-memory', this.debug);
+    }
+  }
+
+  /**
+   * Generate a unique session ID
+   * @returns {string} - Generated session ID
+   * @private
+   */
+  _generateSessionId() {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Load chat history from storage (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
+   * @returns {Promise<Array>} - Chat history messages
+   */
+  async loadHistory(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!this.storageManager) {
+      return [];
+    }
+    await this._ensureStorageInitialized();
+    return await this.storageManager.loadHistory(targetSessionId);
+  }
+
+  /**
+   * Save chat history to storage (lazy initialization)
+   * @param {Array} messages - Messages to save
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
+   * @returns {Promise<void>}
+   */
+  async saveHistory(messages, sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!this.storageManager) {
+      return;
+    }
+    await this._ensureStorageInitialized();
+    const validMessages = (messages || []).filter(msg => msg && typeof msg.role === 'string');
+    if (validMessages.length !== (messages || []).length) {
+      console.warn('Filtered invalid messages before saving history.');
+    }
+    await this.storageManager.saveHistory(targetSessionId, validMessages);
+  }
+
+  /**
+   * Clear chat history from storage (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
+   * @returns {Promise<void>}
+   */
+  async clearHistory(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!this.storageManager) {
+      return;
+    }
+    await this._ensureStorageInitialized();
+    await this.storageManager.clearHistory(targetSessionId);
+  }
+
+  /**
+   * Get storage statistics (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
+   * @returns {Promise<Object>} - Storage statistics
+   */
+  async getStorageStats(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!this.storageManager) {
+      return { type: 'none', initialized: false };
+    }
+    await this._ensureStorageInitialized();
+    return await this.storageManager.getStats(targetSessionId);
+  }
+
+  /**
+   * Get current storage status (lazy initialization)
+   * @param {string} [sessionId] - Optional session ID, uses agent's sessionId if not provided
+   * @returns {Promise<Object>} - Storage status
+   */
+  async getStorageStatus(sessionId) {
+    const targetSessionId = sessionId || this.sessionId;
+    if (!this.storageManager) {
+      return { type: 'none', initialized: false };
+    }
+    await this._ensureStorageInitialized();
+    return await this.storageManager.getStatus(targetSessionId);
+  }
+
+  /**
+   * Count tokens in messages using a simple approximation
+   * @param {Array} messages - Array of message objects
+   * @returns {number} - Estimated token count
+   */
+  countMessageTokens(messages) {
+    // Simple token approximation: ~4 characters per token for English text
+    // This is a rough estimate - in production, you'd use js-tiktoken for accuracy
+    let totalChars = 0;
+    
+    for (const message of messages) {
+      if (message.content) {
+        totalChars += message.content.length;
+      }
+      if (message.toolCalls) {
+        for (const toolCall of message.toolCalls) {
+          if (toolCall.function?.arguments) {
+            totalChars += toolCall.function.arguments.length;
+          }
+        }
+      }
+    }
+    
+    // Rough approximation: 4 characters per token
+    return Math.ceil(totalChars / 4);
+  }
+
+
+
+}

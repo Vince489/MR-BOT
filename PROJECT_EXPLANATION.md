@@ -1,130 +1,168 @@
-# MR-BOT: AI Agent Framework
+# MR-BOT: Advanced Task Decomposition and Execution System
 
 ## Overview
-MR-BOT is an AI agent framework built on top of the Mistral AI API. It provides a robust system for creating AI agents that can interact with users, execute tools, and manage complex workflows with features like progress tracking, circuit breakers, and loop detection.
+
+MR-BOT is an advanced AI agent system that implements a sophisticated task decomposition and execution framework. The system uses a Directed Acyclic Graph (DAG) structure to break down complex objectives into manageable sub-tasks, track dependencies, and execute tasks in the optimal order.
 
 ## Core Components
 
-### 1. Agent Class
-The `Agent` class is the central component of the framework. It extends `EventEmitter` and provides two main execution modes:
+### 1. TaskGraph Class (`src/TaskGraph.js`)
 
-- **Non-streaming mode**: `execute(history, userInput)` - Processes user input and returns a complete response
-- **Streaming mode**: `executeStream(history, userInput, onChunk)` - Processes user input and streams the response
+The `TaskGraph` class is the foundation of the system, implementing a DAG structure for task management:
 
-Key features of the Agent class:
-- **Progress Tracking Protocol**: Automatically injects progress tracking instructions into the system prompt
-- **Tool Management**: Handles tool execution with parallel processing support
-- **Circuit Breaker Integration**: Prevents tool call loops and manages failures
-- **Session Management**: Handles chat history and session persistence
-- **Event System**: Emits events for tool execution, progress updates, and circuit breaker state changes
+- **Task Nodes**: Each node represents a specific task with properties like ID, description, status, dependencies, required tools, and priority
+- **Graph Operations**: Methods for adding tasks, checking dependencies, validating graph structure, and handling task failures
+- **Execution Management**: Topological sorting to determine execution order and identify executable tasks
+- **Visualization**: Generates Mermaid diagrams for visual representation of task relationships
+- **Persistence**: Serialization to/from JSON and integration with storage systems
 
-### 2. Supporting Classes
+### 2. Enhanced Agent Class (`src/Agent.js`)
 
-#### CircuitBreaker
-- Prevents tool call loops and manages failure states
-- Tracks tool call success/failure rates
-- Implements cooldown periods for failed tools
-- Supports global circuit breaker for system-wide protection
+The `Agent` class has been extended with advanced task decomposition capabilities:
 
-#### LoopDetector
-- Detects potential infinite loops in tool calls
-- Maintains history of recent tool calls
-- Identifies patterns that could lead to loops
+- **Task Decomposition**: Breaks down complex objectives into structured task graphs
+- **Plan Execution**: Executes tasks according to the plan with proper dependency management
+- **Progress Tracking**: Maintains and updates task progress with markdown checklists
+- **Error Handling**: Implements robust failure recovery mechanisms
+- **Visualization**: Generates Mermaid diagrams to visualize task execution flow
 
-#### ToolManager
-- Manages tool definitions and handlers
-- Executes tool calls with retry logic
-- Detects and prevents tool call loops
-- Emits events for tool execution lifecycle
+### 3. Storage Integration
 
-#### ResponseProcessor
-- Processes API responses from Mistral
-- Handles tool call execution and validation
-- Manages response processing with token counting
-- Validates tool call formats and arguments
+The system integrates with a storage manager to persist task graphs and execution state:
 
-#### StreamingResponseProcessor
-- Handles streaming responses from Mistral
-- Processes tool calls in streaming mode
-- Manages progress tracking during streaming
-- Supports batch processing modes
+- **Save/Load**: Task graphs can be saved to and loaded from storage
+- **Session Management**: Maintains task state across sessions
+- **Multiple Storage Backends**: Supports different storage types (memory, file system, database)
 
-#### ToolExecutionManager
-- Manages the execution of tool calls
-- Implements semantic loop detection
-- Handles tool execution errors and retries
-- Records execution metrics and insights
+## Key Features
 
-## Technical Architecture
+### Task Decomposition Protocol
 
-### Dependencies
-The project uses several key dependencies:
-- `@mistralai/mistralai`: Official Mistral AI client library
-- `js-tiktoken`: Token counting utility
-- `mongoose`: For data storage (though not fully implemented in the current codebase)
-- `playwright`: For web automation capabilities
-- `telegraf`: For Telegram bot integration
-- `luxon` and `chrono-node`: For date/time handling
-- `mathjs`: For mathematical operations
+When receiving a complex objective, the system:
 
-### Key Features
+1. Analyzes the objective to identify logical sub-tasks
+2. Determines dependencies between tasks
+3. Assigns priorities and required tools to each task
+4. Creates a structured task graph for execution
 
-1. **Progress Tracking System**
-   - Uses markdown checklist format for tracking task progress
-   - Maintains progress history with timestamps
-   - Validates progress format before updates
-   - Emits events for progress changes
+### Task Execution Protocol
 
-2. **Circuit Breaker Pattern**
-   - Prevents cascading failures in tool execution
-   - Tracks success/failure rates for individual tools
-   - Implements cooldown periods for failed tools
-   - Supports global circuit breaker for system protection
+During execution:
 
-3. **Loop Detection**
-   - Detects potential infinite loops in tool calls
-   - Maintains history of recent tool calls
-   - Implements semantic analysis of tool call patterns
+1. Focuses on one task at a time based on priority and dependencies
+2. Provides context from completed dependency tasks
+3. Uses only the required tools for each specific task
+4. Updates progress tracking after each task completion
+5. Handles failures with automatic recovery options
 
-4. **Tool Execution Management**
-   - Supports parallel tool execution
-   - Handles tool execution errors with retry logic
-   - Validates tool call formats and arguments
-   - Emits events for tool execution lifecycle
+### Error Handling and Recovery
 
-5. **Session Management**
-   - Generates unique session IDs
-   - Supports loading/saving chat history
-   - Provides storage statistics and status
+The system implements a comprehensive error handling approach:
 
-## Use Cases
+- **Failure Detection**: Identifies failed tasks and their impact
+- **Recovery Options**: Generates alternative approaches for failed tasks
+- **Automatic Recovery**: Implements recovery tasks when possible
+- **Human Intervention**: Requests guidance when automatic recovery isn't sufficient
 
-MR-BOT is designed for building AI agents that can:
-- Interact with users through chat interfaces
-- Execute complex workflows using tools
-- Maintain state and progress across interactions
-- Handle errors and failures gracefully
-- Prevent infinite loops and runaway processes
-- Track and report progress on tasks
+### Visualization Capabilities
+
+The system generates visual representations of task execution:
+
+- **Mermaid Diagrams**: Shows task dependencies and status with color coding
+- **Execution Flow**: Visualizes the complete task execution path
+- **Status Indicators**: Clearly marks completed, failed, and in-progress tasks
+
+### Progress Tracking
+
+A robust progress tracking system ensures state visibility:
+
+- **Markdown Checklists**: Maintains complete task lists with status indicators
+- **State Persistence**: Saves and restores execution state
+- **Atomic Updates**: Ensures progress updates are complete and consistent
+
+## Technical Implementation
+
+### Directed Acyclic Graph (DAG) Structure
+
+The system uses a DAG to represent tasks and their dependencies:
+
+- **Nodes**: Represent individual tasks with metadata
+- **Edges**: Represent dependencies between tasks
+- **Topological Sorting**: Determines optimal execution order
+- **Cycle Detection**: Prevents circular dependencies
+
+### Task Status Management
+
+Each task maintains a status that drives execution:
+
+- **Pending**: Task is waiting for dependencies to complete
+- **In Progress**: Task is currently being executed
+- **Completed**: Task has finished successfully
+- **Failed**: Task encountered an error
+
+### Storage Integration
+
+Task graphs can be persisted and restored:
+
+- **Serialization**: Converts graphs to/from JSON format
+- **Storage Adapters**: Supports different storage backends
+- **Session Management**: Maintains task state across sessions
 
 ## Example Workflow
 
-1. Initialize an Agent with configuration (API key, system prompt, tools)
-2. Call `execute()` or `executeStream()` with user input
-3. The agent processes the input using Mistral AI
-4. If tools are required, the agent executes them with progress tracking
-5. The circuit breaker monitors for failures or loops
-6. Progress is updated and events are emitted throughout the process
-7. The final response is returned to the user
+1. **Objective Received**: "Research AI advancements and write a report"
+2. **Task Decomposition**: System breaks this down into:
+   - Research AI advancements in 2025
+   - Identify key trends in AI research
+   - Analyze impact on software development
+   - Write report on findings
+   - Create presentation slides
+3. **Dependency Analysis**: Determines execution order based on task dependencies
+4. **Task Execution**: Processes tasks one by one, updating progress
+5. **Visualization**: Generates Mermaid diagram showing execution flow
+6. **Completion**: Presents final results with all task outputs
 
-## Potential Applications
+## Benefits
 
-- Chatbots and virtual assistants
-- Automation systems
-- Workflow management tools
-- AI-powered research assistants
-- Complex task automation
+1. **Complex Task Handling**: Breaks down complex objectives into manageable steps
+2. **Dependency Management**: Ensures tasks execute in the correct order
+3. **Progress Visibility**: Provides clear visibility into execution status
+4. **Error Resilience**: Handles failures gracefully with recovery options
+5. **State Persistence**: Maintains execution state across sessions
+6. **Visual Feedback**: Offers clear visual representation of task execution
 
-## Conclusion
+## Use Cases
 
-MR-BOT provides a comprehensive framework for building robust AI agents with Mistral AI. Its focus on progress tracking, error handling, and loop prevention makes it suitable for complex, long-running tasks that require reliability and state management.
+- Complex research projects
+- Multi-step data analysis
+- Document generation workflows
+- Software development tasks
+- Any objective requiring structured decomposition
+
+## Implementation Notes
+
+The system is designed to be:
+
+- **Modular**: Components can be used independently or together
+- **Extensible**: Easy to add new task types and execution handlers
+- **Robust**: Handles errors and edge cases gracefully
+- **Visible**: Provides clear feedback on execution status
+
+## Testing
+
+The `testTaskGraph.js` script demonstrates:
+
+- Creating and managing task graphs
+- Handling task execution and failures
+- Visualizing task relationships
+- Persisting and restoring task graphs
+
+## Future Enhancements
+
+Potential areas for future development:
+
+- Advanced task prioritization algorithms
+- Machine learning for better task decomposition
+- Collaborative task execution
+- Enhanced visualization options
+- Integration with additional storage backends

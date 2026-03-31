@@ -340,7 +340,13 @@ export class TaskGraph {
         .replace(/"/g, '\\"')
         .replace(/\\n/g, '\\n');
 
-      diagram += `  ${id}["${safeDescription}"];${style ? `:::${style}` : ''}\n`;
+      // Shorten long descriptions for better visualization
+      let displayDescription = safeDescription;
+      if (displayDescription.length > 40) {
+        displayDescription = displayDescription.substring(0, 37) + '...';
+      }
+
+      diagram += `  ${id}["${displayDescription}"];${style ? `:::${style}` : ''}\n`;
     }
 
     // Add all edges
@@ -354,7 +360,16 @@ export class TaskGraph {
     diagram += '\n  classDef default fill:#f9f9f9,stroke:#333;\n';
     diagram += '  classDef completed fill:#9f9,stroke:#333;\n';
     diagram += '  classDef failed fill:#f99,stroke:#333;\n';
-    diagram += '  classDef inprogress fill:#99f,stroke:#333;';
+    diagram += '  classDef inprogress fill:#99f,stroke:#333;\n';
+
+    // Add legend
+    diagram += '\n  subgraph Legend\n';
+    diagram += '    direction TB\n';
+    diagram += '    legend_completed[Completed]:::completed\n';
+    diagram += '    legend_inprogress[In Progress]:::inprogress\n';
+    diagram += '    legend_failed[Failed]:::failed\n';
+    diagram += '    legend_pending[Pending]:::default\n';
+    diagram += '  end';
 
     return diagram;
   }
@@ -465,6 +480,36 @@ export class TaskGraph {
       isComplete: failed === 0 && pending === 0 && inProgress === 0,
       executableTasks: this.getExecutableTasks()
     };
+  }
+
+  /**
+   * Saves the task graph to storage
+   * @param {StorageManager} storageManager - Storage manager instance
+   * @param {string} key - Storage key
+   * @returns {Promise<void>}
+   */
+  async saveToStorage(storageManager, key) {
+    if (!storageManager) {
+      throw new Error('Storage manager is required');
+    }
+
+    const jsonData = this.toJSON();
+    await storageManager.saveData(key, jsonData);
+  }
+
+  /**
+   * Loads a task graph from storage
+   * @param {StorageManager} storageManager - Storage manager instance
+   * @param {string} key - Storage key
+   * @returns {Promise<TaskGraph>} Rehydrated task graph
+   */
+  static async loadFromStorage(storageManager, key) {
+    if (!storageManager) {
+      throw new Error('Storage manager is required');
+    }
+
+    const jsonData = await storageManager.loadData(key);
+    return TaskGraph.fromJSON(jsonData);
   }
 }
 
