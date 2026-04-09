@@ -1,10 +1,11 @@
 // calculator_tool.js
 
 import * as math from 'mathjs';
+import { createTool } from './toolFactory.js';
 
-// --- Pure Function Tool Structure ---
 let memory = 0;
 let previousResult = 0;
+
 console.log('🧮 [CALCULATOR TOOL] Initialized');
 
 function normalizeExpression(expression) {
@@ -173,56 +174,36 @@ function clearMemory() {
   return 'Memory cleared';
 }
 
-export const calculatorTool = {
-  type: "function",
-  function: {
-    name: 'calculatorTool',
-    description: 'Evaluates mathematical expressions using mathjs. Supports arithmetic, trigonometry, logarithms, unit conversions, rounding, and calculator memory operations.',
-    parameters: {
-      type: 'object',
-      properties: {
-        action: {
-          type: 'string',
-          description: 'The specific calculator operation to perform.',
-          enum: ['evaluateExpression', 'storeMemory', 'recallMemory', 'clearMemory']
-        },
-        expression: {
-          type: 'string',
-          description: 'The mathematical expression to evaluate for the evaluateExpression action.'
-        },
-        taskProgress: {
-          type: 'string',
-          description: 'Markdown-formatted checklist to track task progress. Each line should be a checklist item (e.g., "- [ ] Step 1"). This parameter is optional and can be included in any tool call.'
-        }
-      },
-      required: ['action']
+export const calculatorTool = createTool({
+  name: 'calculatorTool',
+  description: 'Evaluates mathematical expressions using mathjs. Supports arithmetic, trigonometry, logarithms, unit conversions, rounding, and calculator memory operations.',
+  properties: {
+    action: {
+      type: 'string',
+      description: 'The specific calculator operation to perform.',
+      enum: ['evaluateExpression', 'storeMemory', 'recallMemory', 'clearMemory']
+    },
+    expression: {
+      type: 'string',
+      description: 'The mathematical expression to evaluate for the evaluateExpression action.'
     }
   },
-  handler: async (params) => {
-    console.log('🧮 [CALCULATOR TOOL] Executing calculatorTool with params:', params);
-
-    const { taskProgress, ...restParams } = params;
-    const { action, ...actionParams } = restParams;
-
-    try {
-      switch (action) {
-        case 'evaluateExpression':
-          if (!actionParams.expression) {
-            return "Error: evaluateExpression requires an 'expression' parameter.";
-          }
-          return evaluateExpression(actionParams);
-        case 'storeMemory':
-          return storeMemory();
-        case 'recallMemory':
-          return recallMemory();
-        case 'clearMemory':
-          return clearMemory();
-        default:
-          return `Error: Unknown action '${action}'. Please use one of the defined actions.`;
-      }
-    } catch (error) {
-      console.error('🧮 [CALCULATOR TOOL] Unexpected error during calculation:', error);
-      return `An unexpected error occurred in the calculator tool: ${error.message}`;
+  required: ['action'],
+  handler: async ({ action, expression }) => {
+    switch (action) {
+      case 'evaluateExpression':
+        if (!expression) {
+          throw new Error("evaluateExpression requires an 'expression' parameter.");
+        }
+        return evaluateExpression({ expression });
+      case 'storeMemory':
+        return storeMemory();
+      case 'recallMemory':
+        return recallMemory();
+      case 'clearMemory':
+        return clearMemory();
+      default:
+        throw new Error(`Unknown action '${action}'. Please use one of the defined actions.`);
     }
   }
-};
+});
