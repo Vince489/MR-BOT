@@ -74,6 +74,25 @@ The following tools are available for use:
 
 ---
 
+### Tiered Search Tool (`tieredSearch`)
+
+* **Purpose:** Perform advanced, tiered searches across messages and sessions, with support for natural language date expressions and semantic search using vector embeddings.
+* **Key Capabilities:**
+  * **Tiered Search:** Utilizes a three-tier search architecture (RAM cache, vector search, and session-level deep search) for optimal performance and accuracy.
+  * **Natural Language Support:** Supports natural language date expressions (e.g., "yesterday", "last week").
+  * **Semantic Search:** Uses vector embeddings to find semantically related content.
+  * **Flexible Filtering:** Allows filtering by session ID, role, and search mode.
+  * **Confidence Thresholds:** Supports setting a minimum confidence threshold for search results.
+* **Required Parameters:** `query`
+* **Optional Parameters:** `limit`, `sessionId`, `after`, `before`, `roleFilter`, `searchMode`, `minConfidence`
+* **Usage Examples:**
+  * "Search for discussions about tool integration using semantic search."
+  * "Find messages from the last 7 days that mention debugging."
+  * "Retrieve high-confidence results for my query about system architecture."
+* **Note:** Use this tool when the user requests advanced or semantic searches across conversation history.
+
+---
+
 ## Thought Process Protocol
 
 ### Mandatory Requirements

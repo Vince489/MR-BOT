@@ -4,6 +4,7 @@
 import { SEARCH_THRESHOLDS, detectSearchMode, getSearchThreshold, calculateNumCandidates, assessResultQuality, searchMetrics } from './searchConfig.js';
 import { generateEmbedding } from './embeddingService.js';
 import { victorCache } from './VictorCache.js';
+import { dateTimeTool } from '../tools/dateTimeTool.js';
 
 /**
  * RAM Cache for recent search results
@@ -67,11 +68,14 @@ export class TieredSearchOrchestrator {
     const startTime = Date.now();
     this.cacheStats.totalRequests++;
 
+    // Parse natural language date expressions into a dateRange
+    const parsedDateRange = this.parseDateRangeOptions(options);
+
     // Extract options with defaults
     const {
       limit = 5,
       sessionId = null,
-      dateRange = null,
+      dateRange = parsedDateRange || null,
       roleFilter = null,
       searchMode = null,
       enableCache = true,
@@ -382,6 +386,33 @@ export class TieredSearchOrchestrator {
     };
     
     return JSON.stringify(keyData);
+  }
+
+  /**
+   * Parses natural language date expressions into a dateRange object
+   */
+  async parseDateRangeOptions(options) {
+    const { after, before, dateRange } = options;
+    if (dateRange) return dateRange;
+
+    const result = {};
+
+    if (after) {
+      const parsed = await dateTimeTool.handler({ action: 'parseNaturalLanguage', expression: after });
+      if (parsed && !parsed.startsWith('Error')) result.start = new Date(parsed);
+    }
+
+    if (before) {
+      const parsed = await dateTimeTool.handler({ action: 'parseNaturalLanguage', expression: before });
+      if (parsed && !parsed.startsWith('Error')) result.end = new Date(parsed);
+    }
+
+    // If we have a start but no end, assume 'until now'
+    if (result.start && !result.end) {
+      result.end = new Date();
+    }
+
+    return Object.keys(result).length > 0 ? result : null;
   }
 
   /**

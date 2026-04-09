@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import { calculatorTool } from '../tools/calculatorTool.js';
 import { dateTimeTool } from '../tools/dateTimeTool.js';
 import { thoughtTool } from '../tools/thoughtTool.js';
-import { dbsearchTool } from '../tools/dbsearchTool.js';
+import { dbsearchTool } from '../tools/dbSearchTool.js';
+import { tieredSearchTool } from '../tools/tieredSearchTool.js';
 
 dotenv.config();
 
@@ -23,7 +24,7 @@ async function main() {
     systemPrompt: SYSTEM_PROMPT,
     storageType: 'mongodb', // Just specify the storage type
     sessionId: process.env.SESSION_ID, // Explicitly use the SESSION_ID from .env
-    tools: [thoughtTool, calculatorTool, dateTimeTool, dbsearchTool],
+    tools: [thoughtTool, calculatorTool, dateTimeTool, dbsearchTool, tieredSearchTool],
     debug: true, // Enable debug mode to see enhanced streaming features
     enableEvents: true // Enable event system for progress tracking
   });

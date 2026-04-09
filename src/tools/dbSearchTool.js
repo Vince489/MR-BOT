@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import { dateTimeTool } from './dateTimeTool.js';
+import { createTool } from './toolFactory.js';
 
 /**
  * Persistent DB Search Tool for AI to search chat history across sessions
@@ -508,62 +509,56 @@ async function handleDbSearch(params, context = {}) {
  * DB Search Tool Definition
  * Provides persistent access to chat history search functionality
  */
-export const dbsearchTool = {
-  type: "function",
-  function: {
-    name: 'dbsearch',
-    description: 'Searches chat history across sessions with comprehensive filtering and time-based queries. Use this tool to find past conversations, explore sessions, and retrieve specific messages.',
-    parameters: {
+export const dbsearchTool = createTool({
+  name: 'dbsearch',
+  description: 'Searches chat history across sessions with comprehensive filtering and time-based queries. Use this tool to find past conversations, explore sessions, and retrieve specific messages.',
+  properties: {
+    action: {
+      type: "string",
+      description: 'The search action to perform.',
+      enum: ['searchMessages', 'listSessions', 'getSessionInfo', 'searchByTime']
+    },
+    sessionId: {
+      type: "string",
+      description: "Session identifier to filter results. Can be sessionId or MongoDB ObjectId."
+    },
+    query: {
+      type: "string",
+      description: "Text search query for finding specific messages or topics."
+    },
+    filters: {
       type: "object",
-      properties: {
-        action: {
-          type: "string",
-          description: 'The search action to perform.',
-          enum: ['searchMessages', 'listSessions', 'getSessionInfo', 'searchByTime']
-        },
-        sessionId: {
-          type: "string",
-          description: "Session identifier to filter results. Can be sessionId or MongoDB ObjectId."
-        },
-        query: {
-          type: "string",
-          description: "Text search query for finding specific messages or topics."
-        },
-        filters: {
-          type: "object",
-          description: "Additional MongoDB query filters to apply (e.g., { role: 'user' })."
-        },
-        after: {
-          type: "string",
-          description: "Find messages after this time (natural language like 'yesterday' or ISO date)."
-        },
-        before: {
-          type: "string",
-          description: "Find messages before this time (natural language like 'today' or ISO date)."
-        },
-        last: {
-          type: "string",
-          description: "Find messages from the last time period (e.g., '24 hours', '7 days', '1 month')."
-        },
-        sort: {
-          type: "object",
-          description: "Sort order for results (default: newest first by createdAt)."
-        },
-        limit: {
-          type: "number",
-          description: "Maximum number of results to return (default: 50)."
-        },
-        skip: {
-          type: "number",
-          description: "Number of results to skip for pagination."
-        },
-        timePeriod: {
-          type: "string",
-          description: "Time period for searchByTime action (e.g., '24 hours', '7 days')."
-        }
-      },
-      required: ['action']
+      description: "Additional MongoDB query filters to apply (e.g., { role: 'user' })."
+    },
+    after: {
+      type: "string",
+      description: "Find messages after this time (natural language like 'yesterday' or ISO date)."
+    },
+    before: {
+      type: "string",
+      description: "Find messages before this time (natural language like 'today' or ISO date)."
+    },
+    last: {
+      type: "string",
+      description: "Find messages from the last time period (e.g., '24 hours', '7 days', '1 month')."
+    },
+    sort: {
+      type: "object",
+      description: "Sort order for results (default: newest first by createdAt)."
+    },
+    limit: {
+      type: "number",
+      description: "Maximum number of results to return (default: 50)."
+    },
+    skip: {
+      type: "number",
+      description: "Number of results to skip for pagination."
+    },
+    timePeriod: {
+      type: "string",
+      description: "Time period for searchByTime action (e.g., '24 hours', '7 days')."
     }
   },
+  required: ['action'],
   handler: handleDbSearch
-};
+});

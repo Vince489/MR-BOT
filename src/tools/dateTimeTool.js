@@ -3,6 +3,7 @@
 import { DateTime } from 'luxon';
 import * as chrono from 'chrono-node';
 import countriesAndTimezones from 'countries-and-timezones';
+import { createTool } from './toolFactory.js';
 
 /**
  * Gets the host machine's IANA timezone (e.g., 'America/New_York').
@@ -421,87 +422,79 @@ function convertUTCToLocal({ utcTimestamp, targetTimezone, format = "MMMM d, yyy
 }
 
 
-// Optimized tool definition for Mistral SDK
-export const dateTimeTool = {
-  type: "function",
-  function: {
-    name: 'dateTimeTool',
-    description: 'Provides current date and time using the host timezone, and can perform date/time calculations, conversions, and natural language parsing.',
-    parameters: {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          description: 'The specific date/time operation to perform.',
-          enum: [
-            'getCurrentDateTime',
-            'convertToTimeZone',
-            'formatDateTime',
-            'dateTimeDifference',
-            'addTimeToDateTime',
-            'subtractTimeFromDateTime',
-            'getDateTimeProperty',
-            'toTimestamp',
-            'fromTimestamp',
-            'parseNaturalLanguage',
-            'convertUTCToLocal'
-          ]
-        },
-        location: {
-          type: "string",
-          description: "OPTIONAL. The location for getCurrentDateTime. Can be an IANA timezone (e.g., 'America/New_York'), city name (e.g., 'New York'), country name (e.g., 'Japan'), or UTC offset (e.g., 'UTC+5'). If omitted, the user's auto-detected timezone will be used."
-        },
-        dateTimeStr: {
-          type: "string",
-          description: 'The date/time string in ISO format for conversion, formatting, difference, add, or subtract operations.'
-        },
-        targetTimeZone: {
-          type: "string",
-          description: "The target time zone for convertToTimeZone. Can be an IANA timezone (e.g., 'Europe/London'), city name (e.g., 'London'), country name (e.g., 'France'), or UTC offset (e.g., 'UTC+2')."
-        },
-        format: {
-          type: "string",
-          description: "The Luxon format string for formatDateTime (e.g., 'yyyy-MM-dd HH:mm:ss')."
-        },
-        startDateTimeStr: {
-          type: "string",
-          description: 'The starting date/time string in ISO format for dateTimeDifference.'
-        },
-        endDateTimeStr: {
-          type: "string",
-          description: 'The ending date/time string in ISO format for dateTimeDifference.'
-        },
-        unit: {
-          type: "string",
-          description: "Time unit. For dateTimeDifference/add/subtract: 'years', 'months', etc. For timestamps: 'seconds' or 'milliseconds'.",
-          enum: ['years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds', 'ms']
-        },
-        amount: {
-          type: "number",
-          description: 'The numerical amount of time for addTimeToDateTime or subtractTimeFromDateTime.'
-        },
-        property: {
-          type: "string",
-          description: "The date/time property to extract for getDateTimeProperty (e.g., 'weekday', 'year', 'zoneName')."
-        },
-        timestamp: {
-          type: "number",
-          description: "Unix timestamp (seconds or milliseconds since Jan 1, 1970 UTC) for fromTimestamp action."
-        },
-        expression: {
-          type: "string",
-          description: "Natural language date/time expression (e.g., 'yesterday', 'next week', 'tomorrow at 3pm') for parseNaturalLanguage action."
-        }
-      },
-      required: ['action']
+// Optimized tool definition using toolFactory
+export const dateTimeTool = createTool({
+  name: 'dateTimeTool',
+  description: 'Provides current date and time using the host timezone, and can perform date/time calculations, conversions, and natural language parsing.',
+  properties: {
+    action: {
+      type: "string",
+      description: 'The specific date/time operation to perform.',
+      enum: [
+        'getCurrentDateTime',
+        'convertToTimeZone',
+        'formatDateTime',
+        'dateTimeDifference',
+        'addTimeToDateTime',
+        'subtractTimeFromDateTime',
+        'getDateTimeProperty',
+        'toTimestamp',
+        'fromTimestamp',
+        'parseNaturalLanguage',
+        'convertUTCToLocal'
+      ]
+    },
+    location: {
+      type: "string",
+      description: "OPTIONAL. The location for getCurrentDateTime. Can be an IANA timezone (e.g., 'America/New_York'), city name (e.g., 'New York'), country name (e.g., 'Japan'), or UTC offset (e.g., 'UTC+5'). If omitted, the user's auto-detected timezone will be used."
+    },
+    dateTimeStr: {
+      type: "string",
+      description: 'The date/time string in ISO format for conversion, formatting, difference, add, or subtract operations.'
+    },
+    targetTimeZone: {
+      type: "string",
+      description: "The target time zone for convertToTimeZone. Can be an IANA timezone (e.g., 'Europe/London'), city name (e.g., 'London'), country name (e.g., 'France'), or UTC offset (e.g., 'UTC+2')."
+    },
+    format: {
+      type: "string",
+      description: "The Luxon format string for formatDateTime (e.g., 'yyyy-MM-dd HH:mm:ss')."
+    },
+    startDateTimeStr: {
+      type: "string",
+      description: 'The starting date/time string in ISO format for dateTimeDifference.'
+    },
+    endDateTimeStr: {
+      type: "string",
+      description: 'The ending date/time string in ISO format for dateTimeDifference.'
+    },
+    unit: {
+      type: "string",
+      description: "Time unit. For dateTimeDifference/add/subtract: 'years', 'months', etc. For timestamps: 'seconds' or 'milliseconds'.",
+      enum: ['years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds', 'ms']
+    },
+    amount: {
+      type: "number",
+      description: 'The numerical amount of time for addTimeToDateTime or subtractTimeFromDateTime.'
+    },
+    property: {
+      type: "string",
+      description: "The date/time property to extract for getDateTimeProperty (e.g., 'weekday', 'year', 'zoneName')."
+    },
+    timestamp: {
+      type: "number",
+      description: "Unix timestamp (seconds or milliseconds since Jan 1, 1970 UTC) for fromTimestamp action."
+    },
+    expression: {
+      type: "string",
+      description: "Natural language date/time expression (e.g., 'yesterday', 'next week', 'tomorrow at 3pm') for parseNaturalLanguage action."
     }
   },
+  required: ['action'],
   handler: async (params) => {
     console.log(`🕒 [DATETIME TOOL] Executing dateTimeTool with params:`, params);
 
-    // Extract taskProgress if present
-    const { task_progress, ...restParams } = params;
-    const { action, ...actionParams } = restParams;
+    const { action, ...actionParams } = params;
 
     try {
       switch (action) {
@@ -566,4 +559,4 @@ export const dateTimeTool = {
       return `An unexpected error occurred in the datetime tool: ${error.message}`;
     }
   }
-};
+});

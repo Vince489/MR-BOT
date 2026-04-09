@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { countMessageTokens } from '../Tokenizer.js';
+import { autoEmbedNewMessage } from '../services/embeddingService.js';
 const Schema = mongoose.Schema;
 
 /**
@@ -28,7 +29,7 @@ const messageSchema = new Schema({
     default: "" 
   }, 
   // --- VECTOR SEARCH ENHANCEMENTS ---
-  // 1024 dimensions for Mistral-embed model (CORRECTED from 1536)
+  // 1024 dimensions for Mistral-embed model
   embedding: {
     type: [Number], 
     required: false,
@@ -206,9 +207,16 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
     });
     
     if (messageDocs.length > 0) {
-      await this.insertMany(messageDocs);
+      console.log("Debug: Messages to be saved:", JSON.stringify(messageDocs, null, 2));
+      const insertedMessages = await this.insertMany(messageDocs);
+
+      // Generate embeddings for each newly inserted message
+      for (const msg of insertedMessages) {
+        console.log("Debug: Inserted message content:", msg.content);
+        await autoEmbedNewMessage(msg);
+      }
     }
-    
+
     return true;
   } catch (error) {
     console.error('Error saving messages:', error);

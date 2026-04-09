@@ -5,7 +5,7 @@ import { Mistral } from "@mistralai/mistralai";
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { retry } from '../../pinecone/retry.js'; // Import the retry utility
+import { retry } from './retry.js'; // Import the retry utility
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -160,11 +160,11 @@ export function shouldEmbed(message) {
   // Skip tool messages without human-readable content
   if (message.role === 'tool' && !message.content) return false;
   
-  // Skip very short messages that don't contain meaningful information
-  if (message.content && message.content.length < 20) return false;
-  
+// Skip very short messages that don't contain meaningful information
+  if (message.content && message.content.length < 3) return false;
+
   // Skip common noise patterns
-  const noisePatterns = ['ok', 'hello', 'hi', 'thanks', 'thank you', 'bye'];
+  const noisePatterns = [];
   if (message.content && noisePatterns.some(pattern => 
     message.content.toLowerCase().includes(pattern))) return false;
   
@@ -293,13 +293,19 @@ export async function autoEmbedNewMessage(messageData) {
       return true; // Already embedded
     }
     
-    // Apply semantic filtering
+// Apply semantic filtering
     if (!shouldEmbed(messageData)) {
       console.log(`Auto-embedding skipped for semantic junk: ${messageData.content?.substring(0, 30)}...`);
       return false;
     }
-    
-    const vector = await generateEmbedding(messageData.content || "");
+
+    // Skip if content is empty or invalid
+    const content = messageData.content || "";
+    if (!content.trim()) {
+      console.log(`Auto-embedding skipped: empty or invalid content.`);
+      return false;
+    }
+    const vector = await generateEmbedding(content);
     const Message = await import('../models/Message.js');
     
     // Update the message with the embedding
