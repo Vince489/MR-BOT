@@ -40,23 +40,25 @@ try {
 
 /**
  * Generate embedding for a single text using Mistral-embed model (1024 dimensions)
+ * This function is designed to be resilient to API failures and will not crash the application
+ * if embeddings cannot be generated.
  */
 export async function generateEmbedding(text) {
   if (!mistralClient) {
     console.error("generateEmbedding: Mistral client is not initialized. This indicates a startup problem.");
-    throw new Error("Mistral client is not initialized. Check server startup logs for initialization errors.");
+    return null; // Return null instead of throwing to allow graceful degradation
   }
 
   if (!text || typeof text !== 'string' || text.trim() === "") {
     console.warn("generateEmbedding called with empty or invalid text.");
-    throw new Error("Cannot generate embedding for empty or invalid text.");
+    return null; // Return null for invalid input
   }
 
   // Check if text is too long for the embedding model
   // Mistral has a token limit, approximately 8K tokens for mistral-embed
   if (text.length > 32000) { // Conservative character limit (roughly 8K tokens)
     console.error(`Input text (length: ${text.length}) exceeds the approximate 32,000 character limit for the Mistral embedding model.`);
-    throw new Error("Input text exceeds the maximum length for embedding.");
+    return null; // Return null for oversized input
   }
 
   try {
@@ -90,6 +92,8 @@ export async function generateEmbedding(text) {
         return error.message.includes("fetch failed") ||
                error.message.includes("rate limit") ||
                error.message.includes("too many requests") ||
+               error.message.includes("503") || // Service Unavailable
+               error.message.includes("429") || // Too Many Requests
                error.code === 429; // HTTP 429 Too Many Requests
       }
     });
@@ -98,7 +102,7 @@ export async function generateEmbedding(text) {
       return result.data[0].embedding;
     } else {
       console.error("Embedding result from Mistral is invalid or does not contain expected structure (result.data[0].embedding):", result);
-      throw new Error("Failed to generate valid embedding structure from Mistral.");
+      return null; // Return null for invalid response structure
     }
   } catch (error) {
     console.error("Error during Mistral embeddings.create call (after retries):", error);
@@ -111,13 +115,15 @@ export async function generateEmbedding(text) {
         console.error("The MISTRAL_API_KEY is likely invalid or missing required permissions.");
       } else if (error.message.includes("fetch failed")) {
         console.error("Network connectivity issue. Check your internet connection and API endpoint availability.");
-      } else if (error.message.includes("rate limit") || error.message.includes("too many requests")) {
+      } else if (error.message.includes("rate limit") || error.message.includes("too many requests") || error.message.includes("429")) {
         console.error("API rate limit exceeded. Consider reducing request frequency or increasing your quota.");
+      } else if (error.message.includes("503") || error.message.includes("Service Unavailable")) {
+        console.error("Mistral API service is currently unavailable. Embedding generation skipped.");
       }
     }
 
-    // Provide more detailed error information
-    throw new Error(`Failed to generate embedding: ${error.message || error}`);
+    // Return null instead of throwing to allow graceful degradation
+    return null;
   }
 }
 
@@ -285,6 +291,7 @@ export function extractTopic(summary) {
 /**
  * Auto-embed new messages when they are saved to MongoDB
  * This function should be called from the Message model's save hook
+ * It's designed to be resilient to embedding failures and will not crash the application
  */
 export async function autoEmbedNewMessage(messageData) {
   try {
@@ -292,8 +299,8 @@ export async function autoEmbedNewMessage(messageData) {
     if (messageData.embedding && messageData.embedding.length > 0) {
       return true; // Already embedded
     }
-    
-// Apply semantic filtering
+
+    // Apply semantic filtering
     if (!shouldEmbed(messageData)) {
       console.log(`Auto-embedding skipped for semantic junk: ${messageData.content?.substring(0, 30)}...`);
       return false;
@@ -305,12 +312,25 @@ export async function autoEmbedNewMessage(messageData) {
       console.log(`Auto-embedding skipped: empty or invalid content.`);
       return false;
     }
+
+    // Generate embedding - this may return null if the API fails
     const vector = await generateEmbedding(content);
-    const Message = await import('../models/Message.js');
-    
-    // Update the message with the embedding
-    await Message.default.findByIdAndUpdate(messageData._id, { embedding: vector });
-    return true;
+
+    // Only update if we got a valid embedding vector
+    if (vector && Array.isArray(vector) && vector.length === 1024) {
+      const Message = await import('../models/Message.js');
+      await Message.default.findByIdAndUpdate(messageData._id, { embedding: vector });
+      console.log(`Successfully embedded message: ${messageData._id}`);
+      return true;
+    } else {
+      // Log when embedding fails but don't throw an error
+      if (vector === null) {
+        console.log(`Auto-embedding skipped: Mistral API unavailable or failed for message: ${messageData._id}`);
+      } else {
+        console.log(`Auto-embedding skipped: Invalid vector format for message: ${messageData._id}`);
+      }
+      return false;
+    }
   } catch (error) {
     console.error('Auto-embedding failed:', error);
     return false;

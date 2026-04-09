@@ -211,9 +211,15 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
       const insertedMessages = await this.insertMany(messageDocs);
 
       // Generate embeddings for each newly inserted message
+      // This is non-blocking - if embeddings fail, the messages are still saved
       for (const msg of insertedMessages) {
         console.log("Debug: Inserted message content:", msg.content);
-        await autoEmbedNewMessage(msg);
+        try {
+          await autoEmbedNewMessage(msg);
+        } catch (error) {
+          // Catch and log errors but don't let them prevent message saving
+          console.error(`Failed to auto-embed message ${msg._id}, but message was saved successfully:`, error);
+        }
       }
     }
 
@@ -223,6 +229,7 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
     return false;
   }
 };
+
 
 // 3. Clear History: Wipes messages for a specific session
 messageSchema.statics.clearHistory = async function(sessionId) {
@@ -386,16 +393,30 @@ messageSchema.statics.generateEmbedding = async function(messageId, content, rol
   try {
     // Import embedding service - use dynamic import to avoid circular dependencies
     const { generateEmbedding } = await import('../services/embeddingService.js');
-    
+
     // Apply semantic filtering
     if (!this.shouldEmbed({ content, role })) {
       console.log(`Skipping embedding for semantic junk: ${content.substring(0, 30)}...`);
       return false;
     }
-    
+
+    // Generate embedding - this may return null if the API fails
     const vector = await generateEmbedding(content);
-    await this.findByIdAndUpdate(messageId, { embedding: vector });
-    return true;
+
+    // Only update if we got a valid embedding vector
+    if (vector && Array.isArray(vector) && vector.length === 1024) {
+      await this.findByIdAndUpdate(messageId, { embedding: vector });
+      console.log(`Successfully embedded message: ${messageId}`);
+      return true;
+    } else {
+      // Log when embedding fails but don't throw an error
+      if (vector === null) {
+        console.log(`Embedding skipped: Mistral API unavailable or failed for message: ${messageId}`);
+      } else {
+        console.log(`Embedding skipped: Invalid vector format for message: ${messageId}`);
+      }
+      return false;
+    }
   } catch (error) {
     console.error(`Failed to embed message ${messageId}:`, error);
     return false;
@@ -431,9 +452,15 @@ messageSchema.statics.semanticSearch = async function(params) {
   try {
     // Import embedding service - use dynamic import to avoid circular dependencies
     const { generateEmbedding } = await import('../services/embeddingService.js');
-    
-    // Generate query vector
+
+    // Generate query vector - this may return null if the API fails
     const queryVector = await generateEmbedding(query);
+
+    // If we don't have a valid query vector, return empty results
+    if (!queryVector || !Array.isArray(queryVector) || queryVector.length !== 1024) {
+      console.log('Semantic search skipped: Could not generate valid query vector');
+      return [];
+    }
 
     // Build aggregation pipeline
     const pipeline = [
