@@ -11,36 +11,36 @@ const Schema = mongoose.Schema;
  */
 const messageSchema = new Schema({
   // Reference to the parent session
-  session: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'Session', 
-    required: true, 
-    index: true 
+  session: {
+    type: Schema.Types.ObjectId,
+    ref: 'Session',
+    required: true,
+    index: true
   },
   // Roles: 'user', 'assistant', 'system', or 'tool'
-  role: { 
-    type: String, 
-    enum: ['user', 'assistant', 'system', 'tool'], 
-    required: true 
+  role: {
+    type: String,
+    enum: ['user', 'assistant', 'system', 'tool'],
+    required: true
   },
-  // The text content (can be empty for toolCalls messages)
-  content: { 
-    type: String, 
-    default: "" 
-  }, 
+  // The text content (can be empty for tool_calls messages)
+  content: {
+    type: String,
+    default: ""
+  },
   // --- VECTOR SEARCH ENHANCEMENTS ---
   // 1024 dimensions for Mistral-embed model
   embedding: {
-    type: [Number], 
+    type: [Number],
     required: false,
     index: false // Atlas Vector Index defined in UI
   },
   // Victor optimization: short summary for token efficiency
   summary: { type: String },
   // -----------------------------------
-  
-  // Mistral/OpenAI toolCalls format
-  toolCalls: [{
+
+  // Mistral/OpenAI tool_calls format
+  tool_calls: [{
     id: { type: String, required: true },
     type: { type: String, default: "function" },
     function: {
@@ -48,8 +48,8 @@ const messageSchema = new Schema({
       arguments: { type: String, required: true } // JSON string
     }
   }],
-  // Must match the ID from the assistant's toolCalls
-  toolCallId: {
+  // Must match the ID from the assistant's tool_calls
+  tool_call_id: {
     type: String
   },
   // Metadata for tracking and context management
@@ -81,7 +81,7 @@ messageSchema.index({ session: 1, 'metadata.isPopped': 1, createdAt: -1 });
 /**
  * ENHANCED VECTOR SEARCH INDEX CONFIGURATION
  * Optimized for tiered search with Victor/Sentinel mode support
- * 
+ *
  * Note: This index should be created in MongoDB Atlas UI with these exact settings:
  * - Type: Vector Search
  * - Path: embedding
@@ -97,7 +97,7 @@ messageSchema.statics.createOptimizedVectorIndex = function() {
   console.log('  - Dimensions: 1024');
   console.log('  - Similarity: cosine');
   console.log('  - Filters: session, role, metadata.isPopped');
-  
+
   return {
     indexName: 'vectorIndex',
     type: 'vectorSearch',
@@ -117,31 +117,33 @@ messageSchema.statics.loadHistory = async function(sessionId) {
   try {
     // Add timeout to prevent hanging if MongoDB is slow/unresponsive
     const sessionPromise = mongoose.model('Session').findOne({ sessionId });
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Session lookup timeout')), 5000)
     );
-    
+
     const session = await Promise.race([sessionPromise, timeoutPromise]);
-    
+
     if (!session) return [];
-    
+
     // Filter by isPopped: false for active context only
     // NO LIMIT - let the pruning logic handle context management
     // Use .lean() to return plain JS objects, avoiding Mongoose virtual id conflicts
-    const messages = await this.find({ 
-      session: session._id, 
-      'metadata.isPopped': false 
+    const messages = await this.find({
+      session: session._id,
+      'metadata.isPopped': false
     }).sort({ createdAt: 1 }).lean();
-    
+
     return messages.map(msg => {
       const result = {
         role: msg.role,
         content: msg.content || ""
       };
-      
-      if (msg.toolCalls && msg.toolCalls.length > 0) {
+
+      // Handle tool calls (check both naming conventions)
+      const toolCalls = msg.tool_calls || msg.toolCalls;
+      if (toolCalls && toolCalls.length > 0) {
         // Clean up tool calls to ensure correct structure without Mongoose artifacts
-        result.toolCalls = msg.toolCalls.map(tc => ({
+        result.tool_calls = toolCalls.map(tc => ({
           id: tc.id,
           type: tc.type,
           function: {
@@ -150,11 +152,12 @@ messageSchema.statics.loadHistory = async function(sessionId) {
           }
         }));
       }
-      
-      if (msg.toolCallId) {
-        result.toolCallId = msg.toolCallId;
+
+      // Handle tool call ID (check both naming conventions)
+      if (msg.tool_call_id || msg.toolCallId) {
+        result.tool_call_id = msg.tool_call_id || msg.toolCallId;
       }
-      
+
       return result;
     });
   } catch (error) {
@@ -186,18 +189,18 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
       console.error(`Session ${sessionId} not found. Cannot save messages.`);
       return false;
     }
-    
+
     const messageDocs = newMessages.map(msg => {
       // Calculate token count for this individual message
       const tokenCount = this.calculateMessageTokens(msg);
-      
+
       return {
         session: session._id,
         role: msg.role,
         content: msg.content || "",
-        // Accept camelCase format
-        toolCalls: (msg.toolCalls && msg.toolCalls.length > 0) ? msg.toolCalls : undefined,
-        toolCallId: msg.toolCallId || undefined,
+        // Accept both camelCase and snake_case formats
+        tool_calls: ((msg.tool_calls || msg.toolCalls) && (msg.tool_calls || msg.toolCalls).length > 0) ? (msg.tool_calls || msg.toolCalls) : undefined,
+        tool_call_id: msg.tool_call_id || msg.toolCallId || undefined,
         metadata: {
           tokens: tokenCount,
           model: msg.metadata?.model || "unknown",
@@ -205,7 +208,7 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
         }
       };
     });
-    
+
     if (messageDocs.length > 0) {
       console.log("Debug: Messages to be saved:", JSON.stringify(messageDocs, null, 2));
       const insertedMessages = await this.insertMany(messageDocs);
@@ -230,13 +233,12 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
   }
 };
 
-
 // 3. Clear History: Wipes messages for a specific session
 messageSchema.statics.clearHistory = async function(sessionId) {
   try {
     const session = await mongoose.model('Session').findOne({ sessionId });
     if (!session) return false;
-    
+
     await this.deleteMany({ session: session._id });
     return true;
   } catch (error) {
@@ -250,7 +252,7 @@ messageSchema.statics.getSessionStats = async function(sessionId) {
   try {
     const session = await mongoose.model('Session').findOne({ sessionId });
     if (!session) return { totalMessages: 0, userMessages: 0, assistantMessages: 0, totalTokens: 0 };
-    
+
     const stats = await this.aggregate([
       { $match: { session: session._id } },
       {
@@ -267,13 +269,13 @@ messageSchema.statics.getSessionStats = async function(sessionId) {
         }
       }
     ]);
-    
+
     // Return the first result or default values if no results
-    return stats.length > 0 ? stats[0] : { 
-      totalMessages: 0, 
-      userMessages: 0, 
-      assistantMessages: 0, 
-      totalTokens: 0 
+    return stats.length > 0 ? stats[0] : {
+      totalMessages: 0,
+      userMessages: 0,
+      assistantMessages: 0,
+      totalTokens: 0
     };
   } catch (error) {
     console.error('Error getting session stats:', error);
@@ -285,13 +287,13 @@ messageSchema.statics.getSessionStats = async function(sessionId) {
 messageSchema.statics.syncContextWindow = async function(sessionId, modelLimit) {
   const target = modelLimit * 0.65;
   const session = await mongoose.model('Session').findOne({ sessionId });
-  
+
   if (!session) return false;
-  
+
   // Get all unpopped messages, newest first
-  const messages = await this.find({ 
-    session: session._id, 
-    'metadata.isPopped': false 
+  const messages = await this.find({
+    session: session._id,
+    'metadata.isPopped': false
   }).sort({ createdAt: -1 });
 
   let total = 0;
@@ -300,23 +302,23 @@ messageSchema.statics.syncContextWindow = async function(sessionId, modelLimit) 
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    
+
     // Check if we need to keep this message due to tool dependencies
     const isRequiredByTool = requiredToolIds.has(msg._id.toString());
     const isToolResult = msg.role === 'tool';
-    const isAssistantWithToolCalls = msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0;
-    
+    const isAssistantWithtool_calls = msg.role === 'assistant' && (msg.tool_calls || msg.toolCalls) && (msg.tool_calls || msg.toolCalls).length > 0;
+
     if (total <= target || isRequiredByTool) {
       keepIds.push(msg._id);
       total += msg.metadata.tokens;
-      
+
       // Track tool call dependencies
-      if (isToolResult && msg.toolCallId) {
-        requiredToolIds.add(msg.toolCallId);
+      if (isToolResult && (msg.tool_call_id || msg.toolCallId)) {
+        requiredToolIds.add(msg.tool_call_id || msg.toolCallId);
       }
-      
-      if (isAssistantWithToolCalls) {
-        msg.toolCalls.forEach(tc => {
+
+      if (isAssistantWithtool_calls) {
+        (msg.tool_calls || msg.toolCalls).forEach(tc => {
           if (requiredToolIds.has(tc.id)) {
             requiredToolIds.delete(tc.id);
           }
@@ -333,7 +335,7 @@ messageSchema.statics.syncContextWindow = async function(sessionId, modelLimit) 
     { session: session._id, _id: { $nin: keepIds } },
     { $set: { 'metadata.isPopped': true } }
   );
-  
+
   return true;
 };
 
@@ -342,10 +344,10 @@ messageSchema.statics.pruneBeforeSend = async function(sessionId) {
   try {
     const session = await mongoose.model('Session').findOne({ sessionId });
     if (!session) return false;
-    
+
     // Get model limit from session config
     const modelLimit = session.modelConfig?.contextLimit || 131072;
-    
+
     // Perform pre-flight pruning
     return await this.syncContextWindow(sessionId, modelLimit);
   } catch (error) {
@@ -359,27 +361,30 @@ messageSchema.statics.getFullHistory = async function(sessionId) {
   try {
     const session = await mongoose.model('Session').findOne({ sessionId });
     if (!session) return [];
-    
+
     // Get ALL messages regardless of isPopped status
     // NO LIMIT - this is for UI display of complete history
     const messages = await this.find({ session: session._id })
       .sort({ createdAt: -1 });
-    
+
     return messages.reverse().map(msg => {
       const result = {
         role: msg.role,
         content: msg.content || "",
         isPopped: msg.metadata.isPopped || false
       };
-      
-      if (msg.toolCalls && msg.toolCalls.length > 0) {
-        result.toolCalls = msg.toolCalls;
+
+      // Handle tool calls (check both naming conventions)
+      const toolCalls = msg.tool_calls || msg.toolCalls;
+      if (toolCalls && toolCalls.length > 0) {
+        result.tool_calls = toolCalls;
       }
-      
-      if (msg.toolCallId) {
-        result.toolCallId = msg.toolCallId;
+
+      // Handle tool call ID (check both naming conventions)
+      if (msg.tool_call_id || msg.toolCallId) {
+        result.tool_call_id = msg.tool_call_id || msg.toolCallId;
       }
-      
+
       return result;
     });
   } catch (error) {
@@ -427,15 +432,15 @@ messageSchema.statics.generateEmbedding = async function(messageId, content, rol
 messageSchema.statics.shouldEmbed = function(message) {
   // Skip tool messages without human-readable content
   if (message.role === 'tool' && !message.content) return false;
-  
+
   // Skip very short messages that don't contain meaningful information
   if (message.content && message.content.length < 20) return false;
-  
+
   // Skip common noise patterns
   const noisePatterns = ['ok', 'hello', 'hi', 'thanks', 'thank you', 'bye'];
-  if (message.content && noisePatterns.some(pattern => 
+  if (message.content && noisePatterns.some(pattern =>
     message.content.toLowerCase().includes(pattern))) return false;
-  
+
   return true;
 };
 
@@ -504,7 +509,7 @@ messageSchema.statics.semanticSearch = async function(params) {
 // 11. Helper function to build filters for semantic search
 messageSchema.statics.buildFilters = function(sessionId, dateRange, roleFilter) {
   const filter = {};
-  
+
   if (sessionId) filter.session = sessionId;
   if (roleFilter) filter.role = roleFilter;
   if (dateRange) {
@@ -513,7 +518,7 @@ messageSchema.statics.buildFilters = function(sessionId, dateRange, roleFilter) 
       $lte: dateRange.end
     };
   }
-  
+
   return filter;
 };
 

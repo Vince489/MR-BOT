@@ -21,7 +21,7 @@ export class Agent extends EventEmitter {
    * @param {number} [config.temperature=0.5] - Temperature for response generation
    * @param {string} config.systemPrompt - System instructions for the agent
    * @param {Array} [config.tools=[]] - Array of tool definitions
-   * @param {boolean} [config.parallelToolCalls=true] - Execute multiple tool calls concurrently using Promise.all()
+   * @param {boolean} [config.paralleltool_calls=true] - Execute multiple tool calls concurrently using Promise.all()
    * @param {Object} [config.loopDetection] - Loop detection configuration with Circuit Breaker settings
    * @param {string} [config.sessionId] - Optional session ID for chat history management
    */
@@ -55,7 +55,7 @@ this.tools = config.tools || [];
 this.systemPrompt = (config.tools && config.tools.length > 0)
   ? this._injectProgressTrackingProtocol(config.systemPrompt)
   : config.systemPrompt;
-    this.parallelToolCalls = config.parallelToolCalls !== false; // default true
+    this.paralleltool_calls = config.paralleltool_calls !== false; // default true
 
     // Simple tool handlers - more robust mapping that handles missing properties
     this.handlers = Object.fromEntries(
@@ -398,15 +398,15 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
   _captureProgressIntent(response) {
     try {
       // Extract tool calls from response
-      const toolCalls = response?.choices?.[0]?.message?.toolCalls || [];
+      const tool_calls = response?.choices?.[0]?.message?.tool_calls || [];
 
-      if (toolCalls.length === 0) return;
+      if (tool_calls.length === 0) return;
 
       // Collect all progress updates from tool calls
       const progressUpdates = [];
 
-      for (const toolCall of toolCalls) {
-        const argumentsStr = toolCall.function?.arguments;
+      for (const tool_call of tool_calls) {
+        const argumentsStr = tool_call.function?.arguments;
         if (!argumentsStr) continue;
 
         try {
@@ -433,7 +433,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
         this.progressHistory.push({
           progress: mergedProgressString,
           timestamp: Date.now(),
-          toolCall: 'intent-capture',
+          tool_call: 'intent-capture',
           status: 'captured',
           state: new Map(this.progressState)
         });
@@ -448,7 +448,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
         this.emit('progress-intent-captured', {
           progress: mergedProgressString,
-          toolCalls: toolCalls.length,
+          tool_calls: tool_calls.length,
           timestamp: Date.now(),
           state: new Map(this.progressState)
         });
@@ -502,7 +502,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     return this.progressHistory.map(entry => ({
       progress: entry.progress,
       timestamp: entry.timestamp,
-      toolCall: entry.toolCall,
+      tool_call: entry.tool_call,
       status: entry.status,
       // Create a new Map with the same entries to avoid reference issues
       state: entry.state ? new Map(entry.state) : new Map()
@@ -1191,11 +1191,11 @@ ${this.taskGraph.generateMermaidDiagram()}
   /**
    * Update progress with enhanced validation and integration
    * @param {string} progress - Markdown checklist format progress update
-   * @param {string} [toolCall] - Optional tool call that triggered this update
+   * @param {string} [tool_call] - Optional tool call that triggered this update
    * @param {string} [status] - Status of the update (success, failed, etc.)
    * @returns {boolean} - True if update was successful, false otherwise
    */
-  updateProgress(progress, toolCall = null, status = 'success') {
+  updateProgress(progress, tool_call = null, status = 'success') {
     if (!this.validateProgressFormat(progress)) {
       console.warn('Invalid progress format. Expected markdown checklist format.');
       // Record progress update failure for circuit breaker
@@ -1214,7 +1214,7 @@ ${this.taskGraph.generateMermaidDiagram()}
     this.progressHistory.push({
       progress: progress,
       timestamp: Date.now(),
-      toolCall: toolCall,
+      tool_call: tool_call,
       status: status
     });
 
@@ -1225,7 +1225,7 @@ ${this.taskGraph.generateMermaidDiagram()}
 
     this.emit('progress-update', {
       progress: progress,
-      toolCall: toolCall,
+      tool_call: tool_call,
       status: status,
       timestamp: Date.now()
     });
@@ -1345,10 +1345,10 @@ ${this.taskGraph.generateMermaidDiagram()}
       if (message.content) {
         totalChars += message.content.length;
       }
-      if (message.toolCalls) {
-        for (const toolCall of message.toolCalls) {
-          if (toolCall.function?.arguments) {
-            totalChars += toolCall.function.arguments.length;
+      if (message.tool_calls) {
+        for (const tool_call of message.tool_calls) {
+          if (tool_call.function?.arguments) {
+            totalChars += tool_call.function.arguments.length;
           }
         }
       }

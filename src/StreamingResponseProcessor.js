@@ -35,7 +35,7 @@ export class StreamingResponseProcessor extends EventEmitter {
     this.validRoles = new Set(['system', 'user', 'assistant', 'tool']);
   }
 
-  _normalizeToolCall(tc) {
+  _normalizetool_call(tc) {
     return {
       id: tc.id || `call_${Date.now()}`,
       type: tc.type || 'function',
@@ -46,29 +46,34 @@ export class StreamingResponseProcessor extends EventEmitter {
     };
   }
 
-  _sanitizeMessagesForApi(messages) {
-    return (messages || []).map((msg) => {
-      if (!msg || typeof msg !== 'object') return null;
-      let role = typeof msg.role === 'string' ? msg.role.trim().toLowerCase() : null;
-      if (!role) {
-        if (msg.toolCallId) role = 'tool';
-        else if (msg.toolCalls) role = 'assistant';
-        else if (msg.content !== undefined) role = 'assistant';
-      }
-      if (!this.validRoles.has(role)) {
-        if (this.debug) console.warn(`⚠️ Skipping invalid message role in stream payload: ${String(msg.role)}`);
-        return null;
-      }
-      const normalized = { role, content: msg.content ?? '' };
-      if (role === 'assistant' && Array.isArray(msg.toolCalls)) {
-        normalized.toolCalls = msg.toolCalls.map(this._normalizeToolCall);
-      }
-      if (role === 'tool') {
-        if (msg.toolCallId) normalized.toolCallId = msg.toolCallId;
-      }
-      return normalized;
-    }).filter(Boolean);
-  }
+   _sanitizeMessagesForApi(messages) {
+     return (messages || []).map((msg) => {
+       if (!msg || typeof msg !== 'object') return null;
+       let role = typeof msg.role === 'string' ? msg.role.trim().toLowerCase() : null;
+       if (!role) {
+         if (msg.tool_call_id || msg.toolCallId) role = 'tool';
+         else if (msg.tool_calls || msg.toolCalls) role = 'assistant';
+         else if (msg.content !== undefined) role = 'assistant';
+       }
+       if (!this.validRoles.has(role)) {
+         if (this.debug) console.warn(`⚠️ Skipping invalid message role in stream payload: ${String(msg.role)}`);
+         return null;
+       }
+       const normalized = { role, content: msg.content ?? '' };
+
+       // Handle Assistant Tool Calls (Check BOTH names)
+       const toolCalls = msg.tool_calls || msg.toolCalls;
+       if (role === 'assistant' && Array.isArray(toolCalls) && toolCalls.length > 0) {
+         normalized.tool_calls = toolCalls.map(this._normalizetool_call);
+       }
+
+       // Handle Tool Responses (Check BOTH names)
+       if (role === 'tool') {
+         normalized.tool_call_id = msg.tool_call_id || msg.toolCallId;
+       }
+       return normalized;
+     }).filter(Boolean);
+   }
 
   /**
    * Set agent mode and configure processor accordingly
@@ -115,9 +120,9 @@ export class StreamingResponseProcessor extends EventEmitter {
     while (round <= maxRounds) {
       if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} started`);
 
-      // Use camelCase: SDK outbound schema expects toolCalls
-      let assistantMessage = { role: "assistant", content: "", toolCalls: [] };
-      const toolCallAccumulator = new Map();
+      // Use camelCase: SDK outbound schema expects tool_calls
+      let assistantMessage = { role: "assistant", content: "", tool_calls: [] };
+      const tool_callAccumulator = new Map();
 
       // Consume the stream
       for await (const chunk of currentStream) {
@@ -129,23 +134,24 @@ export class StreamingResponseProcessor extends EventEmitter {
           if (onChunk) onChunk(delta.content);
         }
 
-        const streamingToolCalls = delta.toolCalls;
-        if (streamingToolCalls) {
-          for (const tc of streamingToolCalls) {
-            const index = tc.index ?? 0;
-            if (!toolCallAccumulator.has(index)) {
-              toolCallAccumulator.set(index, { id: tc.id || "", function: { name: "", arguments: "" } });
-            }
-            const current = toolCallAccumulator.get(index);
-            if (tc.id) current.id = tc.id;
-            if (tc.function?.name) current.function.name += tc.function.name;
-            if (tc.function?.arguments) current.function.arguments += tc.function.arguments;
-          }
-        }
+         // FIX: Check both naming conventions from the SDK delta
+         const streamingtool_calls = delta.tool_calls || delta.toolCalls;
+         if (streamingtool_calls) {
+           for (const tc of streamingtool_calls) {
+             const index = tc.index ?? 0;
+             if (!tool_callAccumulator.has(index)) {
+               tool_callAccumulator.set(index, { id: tc.id || "", function: { name: "", arguments: "" } });
+             }
+             const current = tool_callAccumulator.get(index);
+             if (tc.id) current.id = tc.id;
+             if (tc.function?.name) current.function.name += tc.function.name;
+             if (tc.function?.arguments) current.function.arguments += tc.function.arguments;
+           }
+         }
       }
 
       // Finalize tool calls - preserve original IDs to avoid mismatch
-      const accumulated = Array.from(toolCallAccumulator.values()).map((tc, i) => ({
+      const accumulated = Array.from(tool_callAccumulator.values()).map((tc, i) => ({
         id: tc.id || `call_${Date.now()}_${i}`,
         type: "function",
         function: {
@@ -155,17 +161,17 @@ export class StreamingResponseProcessor extends EventEmitter {
       }));
 
       if (accumulated.length > 0) {
-        assistantMessage.toolCalls = accumulated;
+        assistantMessage.tool_calls = accumulated;
         // Keep tool-call assistant messages API-compliant
         assistantMessage.content = assistantMessage.content || "";
       } else {
-        delete assistantMessage.toolCalls;
+        delete assistantMessage.tool_calls;
       }
 
       currentMessages.push(assistantMessage);
 
       // Termination 1: Success - No tool calls
-      if (!assistantMessage.toolCalls || assistantMessage.toolCalls.length === 0) {
+      if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
         if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No tool calls, task finished`);
         
         // Memory integration: Commit final insights
@@ -222,8 +228,8 @@ export class StreamingResponseProcessor extends EventEmitter {
       }
 
       const toolActions = [];
-      const runResult = await toolExecutionManager.executeToolCalls(
-        assistantMessage.toolCalls,
+      const runResult = await toolExecutionManager.executetool_calls(
+        assistantMessage.tool_calls,
         toolActions,
         this.agent.userInput || "",
         true, // parallel execution
@@ -248,10 +254,10 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       const { toolResults, allCallsSuccessful } = runResult;
       currentMessages.push(...toolResults);
-      loopDetector.updateRecentToolCalls(assistantMessage.toolCalls, allCallsSuccessful);
+      loopDetector.updateRecenttool_calls(assistantMessage.tool_calls, allCallsSuccessful);
 
       // Post-execution loop check
-      if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
+      if (loopDetector.detecttool_callLoop(assistantMessage.tool_calls)) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
         
         // Memory integration: Commit loop detection insight
@@ -497,15 +503,15 @@ export class StreamingResponseProcessor extends EventEmitter {
 
   /**
    * Parse progress from tool calls with lightweight mode support
-   * @param {Array} toolCalls - Array of tool calls
+   * @param {Array} tool_calls - Array of tool calls
    * @returns {Map<string, boolean>} - Parsed progress state
    * @private
    */
-  _parseProgressFromToolCalls(toolCalls) {
+  _parseProgressFromtool_calls(tool_calls) {
     const states = [];
 
-    for (const toolCall of toolCalls) {
-      const argumentsStr = toolCall.function?.arguments;
+    for (const tool_call of tool_calls) {
+      const argumentsStr = tool_call.function?.arguments;
       if (!argumentsStr) continue;
 
       try {

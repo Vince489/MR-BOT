@@ -230,7 +230,7 @@ async function searchMessages(params) {
         content: msg.content || '',
         createdAt: msg.createdAt,
         sessionId: sessionInfo?.sessionId || null,
-        hasToolCalls: msg.toolCalls && msg.toolCalls.length > 0
+        hastool_calls: msg.tool_calls && msg.tool_calls.length > 0
       })),
       sessionInfo: sessionInfo ? {
         sessionId: sessionInfo.sessionId,
@@ -366,7 +366,7 @@ async function getSessionInfo(params, context = {}) {
         role: msg.role,
         content: msg.content || '',
         createdAt: msg.createdAt,
-        hasToolCalls: msg.toolCalls && msg.toolCalls.length > 0
+        hastool_calls: msg.tool_calls && msg.tool_calls.length > 0
       })),
       metadata: {
         executedAt: new Date().toISOString()

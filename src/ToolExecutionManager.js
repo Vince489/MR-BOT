@@ -10,21 +10,21 @@ export class ToolExecutionManager extends EventEmitter {
     super();
     this.handlers = {};
     this.apiTools = [];
-    this.recentToolCalls = [];
+    this.recenttool_calls = [];
     this.maxRecentCalls = 3;
-    
+
     // Semantic loop detection via Pinecone
     this.pineconeClient = null;
     this.semanticLoopThreshold = 0.85; // Similarity threshold for semantic loops
-    
+
     // Memory integration
     this.memoryMode = false;
     this.victorMode = false;
     this.sentinelMode = false;
-    
+
     // Progress tracking
     this.lightweightMode = false;
-    
+
     // Importance scoring
     this.importanceThreshold = 7; // Minimum importance score for memory commit
   }
@@ -37,10 +37,10 @@ export class ToolExecutionManager extends EventEmitter {
     this.agent = agent;
     this.debug = agent.debug || false;
     this.enableEvents = agent.enableEvents || false;
-    
+
     // Initialize tools from agent
     this.initializeTools(agent.tools || []);
-    
+
     // Set up Pinecone for semantic loop detection if available
     if (agent.pineconeClient) {
       this.pineconeClient = agent.pineconeClient;
@@ -58,7 +58,7 @@ export class ToolExecutionManager extends EventEmitter {
     if (!tools || tools.length === 0) return;
 
     this.handlers = Object.fromEntries(tools.map((t) => [t.function.name, t.handler]));
-    
+
     // Clone and modify the tool definitions to include taskProgress as an optional parameter
     this.apiTools = tools.map(({ handler, function: toolFunction, ...tool }) => {
       // Clone the tool function to avoid modifying the original
@@ -110,7 +110,7 @@ export class ToolExecutionManager extends EventEmitter {
     this.sentinelMode = mode === 'sentinel';
     this.memoryMode = this.victorMode || this.sentinelMode;
     this.lightweightMode = this.victorMode;
-    
+
     if (this.debug) {
       console.log(`🔧 [TOOL MANAGER] Mode set to: ${mode}`);
     }
@@ -118,18 +118,20 @@ export class ToolExecutionManager extends EventEmitter {
 
   /**
    * Execute a single tool call with enhanced error handling and memory integration
-   * @param {Object} toolCall - Tool call object
+   * @param {Object} tool_call - Tool call object
    * @param {Array} actionsTaken - Array to track actions
    * @param {string} userInput - User input for context
    * @param {number} retryCount - Current retry count
    * @param {AbortSignal} abortSignal - Abort signal for cancellation
    * @returns {Promise<Object>} Tool result
    */
-  async executeToolCall(toolCall, actionsTaken, userInput, retryCount = 0, abortSignal) {
-    const { name, arguments: rawArgs } = toolCall.function;
+  async executetool_call(tool_call, actionsTaken, userInput, retryCount = 0, abortSignal) {
+    // Handle both camelCase and snake_case
+    const functionName = tool_call.function?.name || tool_call.functionName;
+    const rawArgs = tool_call.function?.arguments || tool_call.functionArguments;
     const startTime = Date.now();
 
-    if (this.enableEvents) this.emit("tool-start", { tool: name, id: toolCall.id });
+    if (this.enableEvents) this.emit("tool-start", { tool: functionName, id: tool_call.id });
 
     try {
       const args = JSON.parse(rawArgs || "{}");
@@ -147,71 +149,71 @@ export class ToolExecutionManager extends EventEmitter {
 
       // Parse and process taskProgress if present
       if (taskProgress) {
-        this._processTaskProgress(taskProgress, name, validatedArgs);
+        this._processTaskProgress(taskProgress, functionName, validatedArgs);
       }
 
-      const handler = this.handlers[name];
-      if (!handler) throw new Error(`Handler for "${name}" not found`);
+      const handler = this.handlers[functionName];
+      if (!handler) throw new Error(`Handler for "${functionName}" not found`);
 
       // Memory integration: Record structured thought before execution
       if (this.memoryMode) {
-        await this._recordExecutionThought(name, validatedArgs, 'beforeExecution');
+        await this._recordExecutionThought(functionName, validatedArgs, 'beforeExecution');
       }
 
-      const result = await handler(validatedArgs, { 
-        agent: this.agent, 
-        userInput, 
-        signal: abortSignal 
+      const result = await handler(validatedArgs, {
+        agent: this.agent,
+        userInput,
+        signal: abortSignal
       });
       const duration = Date.now() - startTime;
 
-      actionsTaken.push({ 
-        id: toolCall.id, 
-        tool: name, 
-        args: validatedArgs, 
-        result, 
-        duration, 
-        ts: new Date() 
+      actionsTaken.push({
+        id: tool_call.id,
+        tool: functionName,
+        args: validatedArgs,
+        result,
+        duration,
+        ts: new Date()
       });
 
       // Memory integration: Record structured thought after execution
       if (this.memoryMode) {
-        await this._recordExecutionThought(name, validatedArgs, 'afterExecution', result, duration);
+        await this._recordExecutionThought(functionName, validatedArgs, 'afterExecution', result, duration);
       }
 
       if (this.enableEvents) {
-        this.emit("tool-metrics", { tool: name, duration, success: true });
-        this.emit("tool-end", { tool: name, id: toolCall.id, result });
+        this.emit("tool-metrics", { tool: functionName, duration, success: true });
+        this.emit("tool-end", { tool: functionName, id: tool_call.id, result });
       }
 
       // Debug logging
       if (this.debug) {
         console.log(`[DEBUG] Tool Execution Details:`);
-        console.log(`[DEBUG] Tool Name: ${name}`);
+        console.log(`[DEBUG] Tool Name: ${functionName}`);
         console.log(`[DEBUG] Tool Arguments:`, validatedArgs);
         console.log(`[DEBUG] Tool Result:`, result);
         console.log(`[DEBUG] Execution Time: ${duration}ms`);
       }
 
       // Update recent tool calls with success status
-      this._updateRecentToolCalls([toolCall], true);
+      this._updateRecenttool_calls([tool_call], true);
 
       return {
         role: "tool",
         content: typeof result === "object" ? JSON.stringify(result) : String(result),
-        toolCallId: toolCall.id,
+        tool_call_id: tool_call.id,
       };
     } catch (error) {
       // Update recent tool calls with failure status before handling error
-      this._updateRecentToolCalls([toolCall], false);
-      return this._handleToolError(error, toolCall, actionsTaken, userInput, retryCount, startTime, abortSignal);
+      this._updateRecenttool_calls([tool_call], false);
+      return this._handleToolError(error, tool_call, actionsTaken, userInput, retryCount, startTime, abortSignal);
     }
   }
 
   /**
    * Handle tool execution errors with retry logic and memory integration
    * @param {Error} error - Error object
-   * @param {Object} toolCall - Tool call object
+   * @param {Object} tool_call - Tool call object
    * @param {Array} actionsTaken - Array to track actions
    * @param {string} userInput - User input for context
    * @param {number} retryCount - Current retry count
@@ -219,132 +221,137 @@ export class ToolExecutionManager extends EventEmitter {
    * @param {AbortSignal} abortSignal - Abort signal for cancellation
    * @returns {Promise<Object>} Tool result
    */
-  async _handleToolError(error, toolCall, actionsTaken, userInput, retryCount, startTime, abortSignal) {
+  async _handleToolError(error, tool_call, actionsTaken, userInput, retryCount, startTime, abortSignal) {
+    // Handle both camelCase and snake_case
+    const functionName = tool_call.function?.name || tool_call.functionName;
+
     const isRetriable = error.message?.includes("rate limit") || error.code === "ETIMEDOUT";
     const maxRetries = 2;
 
     if (isRetriable && retryCount < maxRetries) {
       if (this.debug) {
-        console.log(`🔄 [TOOL RETRY] Retrying tool ${toolCall.function.name} (attempt ${retryCount + 1}/${maxRetries})`);
+        console.log(`🔄 [TOOL RETRY] Retrying tool ${functionName} (attempt ${retryCount + 1}/${maxRetries})`);
       }
-      
+
       await new Promise((r) => setTimeout(r, Math.pow(2, retryCount) * 1000));
-      return this.executeToolCall(toolCall, actionsTaken, userInput, retryCount + 1, abortSignal);
+      return this.executetool_call(tool_call, actionsTaken, userInput, retryCount + 1, abortSignal);
     }
 
-    console.error(`Tool Error [${toolCall.function.name}]:`, error.message);
+    console.error(`Tool Error [${functionName}]:`, error.message);
 
     // Memory integration: Record error insight
     if (this.memoryMode) {
-      await this._recordErrorInsight(toolCall.function.name, error, retryCount);
+      await this._recordErrorInsight(functionName, error, retryCount);
     }
 
     return {
       role: "tool",
-      name: toolCall.function.name,
+      name: functionName,
       content: JSON.stringify({ status: "error", message: error.message }),
-      toolCallId: toolCall.id,
+      tool_call_id: tool_call.id,
     };
   }
 
   /**
    * Execute multiple tool calls with unified error handling and semantic loop detection
-   * @param {Array} toolCalls - Array of tool call objects
+   * @param {Array} tool_calls - Array of tool call objects
    * @param {Array} actionsTaken - Array to track actions
    * @param {string} userInput - User input for context
-   * @param {boolean} parallelToolCalls - Whether to execute in parallel
+   * @param {boolean} paralleltool_calls - Whether to execute in parallel
    * @param {AbortSignal} abortSignal - Abort signal for cancellation
    * @returns {Promise<{toolResults: Array, allCallsSuccessful: boolean}>}
    */
-  async executeToolCalls(toolCalls, actionsTaken, userInput, parallelToolCalls, abortSignal) {
+  async executetool_calls(tool_calls, actionsTaken, userInput, paralleltool_calls, abortSignal) {
     // Semantic loop detection
-    const semanticLoopResult = await this._checkSemanticLoops(toolCalls);
+    const semanticLoopResult = await this._checkSemanticLoops(tool_calls);
     if (semanticLoopResult.loopDetected) {
       if (this.debug) {
         console.warn(`⚠️ [SEMANTIC LOOP] Semantic loop detected for tools: ${semanticLoopResult.tools.join(', ')}`);
       }
-      
+
       // Memory integration: Record semantic loop insight
       if (this.memoryMode) {
         await this._recordSemanticLoopInsight(semanticLoopResult);
       }
-      
+
       return { toolResults: [], allCallsSuccessful: false };
     }
 
-    if (parallelToolCalls) {
+    if (paralleltool_calls) {
       const results = await Promise.all(
-        toolCalls.map((toolCall) =>
-          this.executeToolCall(toolCall, actionsTaken, userInput, 0, abortSignal)
+        tool_calls.map((tool_call) =>
+          this.executetool_call(tool_call, actionsTaken, userInput, 0, abortSignal)
         )
       );
       return { toolResults: results, allCallsSuccessful: results.every(r => !this._isToolFailure(r)) };
     } else {
       const results = [];
       let allSuccessful = true;
-      
-      for (const toolCall of toolCalls) {
-        const result = await this.executeToolCall(toolCall, actionsTaken, userInput, 0, abortSignal);
+
+      for (const tool_call of tool_calls) {
+        const result = await this.executetool_call(tool_call, actionsTaken, userInput, 0, abortSignal);
         results.push(result);
         if (this._isToolFailure(result)) {
           allSuccessful = false;
         }
       }
-      
+
       return { toolResults: results, allCallsSuccessful };
     }
   }
 
   /**
    * Check for semantic loops using Pinecone vector similarity
-   * @param {Array} toolCalls - Array of tool calls to check
+   * @param {Array} tool_calls - Array of tool calls to check
    * @returns {Promise<{loopDetected: boolean, tools: Array}>}
    */
-  async _checkSemanticLoops(toolCalls) {
-    if (!this.pineconeClient || toolCalls.length === 0) {
+  async _checkSemanticLoops(tool_calls) {
+    if (!this.pineconeClient || tool_calls.length === 0) {
       return { loopDetected: false, tools: [] };
     }
 
     const loops = [];
 
-    for (const toolCall of toolCalls) {
+    for (const tool_call of tool_calls) {
       try {
-        const signature = `${toolCall.function.name}:${toolCall.function.arguments}`;
-        const vector = await this._createVectorFromSignature(signature);
-        
+        // Handle both camelCase and snake_case
+        const functionName = tool_call.function?.name || tool_call.functionName;
+        const functionArgs = tool_call.function?.arguments || tool_call.functionArguments;
+        const signature = `${functionName}:${functionArgs}`;
+
         // Query Pinecone for similar tool calls
         const queryResult = await this.pineconeClient.query({
-          vector: vector,
+          vector: await this._createVectorFromSignature(signature),
           topK: 5,
           includeMetadata: true
         });
 
         // Check if any results exceed similarity threshold
-        const similarCalls = queryResult.matches.filter(match => 
+        const similarCalls = queryResult.matches.filter(match =>
           match.score > this.semanticLoopThreshold
         );
 
         if (similarCalls.length > 0) {
-          loops.push(toolCall.function.name);
-          
+          loops.push(functionName);
+
           if (this.debug) {
-            console.log(`🔍 [SEMANTIC LOOP] Found ${similarCalls.length} similar calls for ${toolCall.function.name} with score ${similarCalls[0].score}`);
+            console.log(`🔍 [SEMANTIC LOOP] Found ${similarCalls.length} similar calls for ${functionName} with score ${similarCalls[0].score}`);
           }
         }
 
         // Store current call in Pinecone for future comparisons
         await this.pineconeClient.upsert([{
-          id: `toolCall_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          vector: vector,
+          id: `tool_call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          vector: await this._createVectorFromSignature(signature),
           metadata: {
-            toolName: toolCall.function.name,
+            toolName: functionName,
             signature: signature,
             timestamp: Date.now()
           }
         }]);
 
       } catch (error) {
-        console.warn(`Failed to check semantic loop for ${toolCall.function.name}:`, error);
+        console.warn(`Failed to check semantic loop for ${tool_call.function?.name || tool_call.functionName}:`, error);
       }
     }
 
@@ -361,29 +368,32 @@ export class ToolExecutionManager extends EventEmitter {
     const text = signature.toLowerCase();
     const chars = text.split('');
     const vector = new Array(1536).fill(0); // Standard embedding dimension
-    
+
     for (let i = 0; i < chars.length; i++) {
       const charCode = chars[i].charCodeAt(0);
       const index = i % vector.length;
       vector[index] += charCode / 255; // Normalize
     }
-    
+
     return vector;
   }
 
   /**
    * Check for recursive tool call loops (syntactic)
-   * @param {Array} toolCalls - Array of tool calls to check
+   * @param {Array} tool_calls - Array of tool calls to check
    * @returns {boolean} - True if a loop is detected
    */
-  detectToolCallLoop(toolCalls) {
+  detecttool_callLoop(tool_calls) {
     // If we have only one tool call, check if it matches the last failed call
-    if (toolCalls.length === 1) {
-      const call = toolCalls[0];
-      const callSignature = `${call.function.name}:${call.function.arguments}`;
+    if (tool_calls.length === 1) {
+      const call = tool_calls[0];
+      // Handle both camelCase and snake_case
+      const functionName = call.function?.name || call.functionName;
+      const functionArgs = call.function?.arguments || call.functionArguments;
+      const callSignature = `${functionName}:${functionArgs}`;
 
       // Check if this exact call was made in the last 2 steps and failed
-      const recentMatches = this.recentToolCalls.filter(
+      const recentMatches = this.recenttool_calls.filter(
         tc => tc.signature === callSignature && tc.success === false
       );
 
@@ -397,46 +407,57 @@ export class ToolExecutionManager extends EventEmitter {
 
   /**
    * Update the record of recent tool calls
-   * @param {Array} toolCalls - Array of tool calls
+   * @param {Array} tool_calls - Array of tool calls
    * @param {boolean} success - Whether the calls succeeded
    */
-  _updateRecentToolCalls(toolCalls, success) {
+  _updateRecenttool_calls(tool_calls, success) {
     // Add current tool calls to the beginning of the array
-    const newCalls = toolCalls.map(tc => ({
-      signature: `${tc.function.name}:${tc.function.arguments}`,
-      success: success,
-      timestamp: Date.now()
-    }));
+    const newCalls = tool_calls.map(tc => {
+      // Handle both camelCase and snake_case
+      const functionName = tc.function?.name || tc.functionName;
+      const functionArgs = tc.function?.arguments || tc.functionArguments;
+      return {
+        signature: `${functionName}:${functionArgs}`,
+        success: success,
+        timestamp: Date.now()
+      };
+    });
 
-    this.recentToolCalls.unshift(...newCalls);
+    this.recenttool_calls.unshift(...newCalls);
 
     // Keep only the most recent calls
-    if (this.recentToolCalls.length > this.maxRecentCalls * 2) {
-      this.recentToolCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
+    if (this.recenttool_calls.length > this.maxRecentCalls * 2) {
+      this.recenttool_calls = this.recenttool_calls.slice(0, this.maxRecentCalls * 2);
     }
   }
 
   /**
    * Generate a Mermaid.js diagram for tool call flows
-   * @param {Array} toolCalls - Array of tool calls
+   * @param {Array} tool_calls - Array of tool calls
    * @returns {string} - Mermaid.js diagram string
    */
-  generateMermaidDiagram(toolCalls) {
+  generateMermaidDiagram(tool_calls) {
     let diagram = "```mermaid\ngraph TD\n";
 
     // Add user query node
     diagram += "  A[User Query] --> B{Tool Needed?}\n";
 
     // Add tool call nodes
-    toolCalls.forEach((toolCall, index) => {
-      const toolName = toolCall.function.name;
+    tool_calls.forEach((tool_call, index) => {
+      // Handle both camelCase and snake_case
+      const functionName = tool_call.function?.name || tool_call.functionName;
       const nodeId = `C${index}`;
-      diagram += `  B -->|Yes| ${nodeId}[${toolName}]\n`;
+      diagram += `  B -->|Yes| ${nodeId}[${functionName}]\n`;
 
       // If there are arguments, add them as a note
-      if (toolCall.function.arguments) {
+      const functionArgs = tool_call.function?.arguments || tool_call.functionArguments;
+      if (functionArgs) {
         const argsNodeId = `D${index}`;
-        diagram += `  ${nodeId} --> ${argsNodeId}[${JSON.stringify(JSON.parse(toolCall.function.arguments))}]\n`;
+        try {
+          diagram += `  ${nodeId} --> ${argsNodeId}[${JSON.stringify(JSON.parse(functionArgs))}]\n`;
+        } catch (e) {
+          diagram += `  ${nodeId} --> ${argsNodeId}[${functionArgs}]\n`;
+        }
       }
     });
 
@@ -444,7 +465,7 @@ export class ToolExecutionManager extends EventEmitter {
     diagram += "  B -->|No| E[Generate Response]\n";
 
     // Connect tool results to final response
-    toolCalls.forEach((_, index) => {
+    tool_calls.forEach((_, index) => {
       const nodeId = `C${index}`;
       diagram += `  ${nodeId} --> E\n`;
     });

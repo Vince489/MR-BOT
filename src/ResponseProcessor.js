@@ -8,7 +8,7 @@ import { countMessageTokens } from './Tokenizer.js';
 export class ResponseProcessor {
   /**
    * @param {Object} agent - The Agent instance (provides client, model,
-   *   parallelToolCalls, handlers, circuitBreaker, loopDetector)
+   *   paralleltool_calls, handlers, circuitBreaker, loopDetector)
    */
   constructor(agent) {
     this.agent = agent;
@@ -21,37 +21,43 @@ export class ResponseProcessor {
    * @param {Array} messages
    * @returns {Array}
    */
-  _sanitizeMessagesForApi(messages) {
-    const validRoles = new Set(['system', 'user', 'assistant', 'tool']);
-    return (messages || []).map((msg) => {
-      if (!msg || typeof msg !== 'object') return null;
-      let role = typeof msg.role === 'string' ? msg.role.trim().toLowerCase() : null;
-      if (!role) {
-        if (msg.toolCallId) role = 'tool';
-        else if (msg.toolCalls) role = 'assistant';
-        else if (msg.content !== undefined) role = 'assistant';
-      }
-      if (!validRoles.has(role)) {
-        if (this.debug) console.warn(`⚠️ Skipping invalid message role: ${String(msg.role)}`);
-        return null;
-      }
-      const sanitized = { role, content: msg.content ?? '' };
-      if (role === 'assistant' && Array.isArray(msg.toolCalls)) {
-        sanitized.toolCalls = msg.toolCalls.map((tc) => ({
-          id: tc.id || `call_${Date.now()}`,
-          type: tc.type || 'function',
-          function: {
-            name: tc.function?.name || '',
-            arguments: tc.function?.arguments || ''
-          }
-        }));
-      }
-      if (role === 'tool') {
-        if (msg.toolCallId) sanitized.toolCallId = msg.toolCallId;
-      }
-      return sanitized;
-    }).filter(Boolean);
-  }
+   _sanitizeMessagesForApi(messages) {
+     const validRoles = new Set(['system', 'user', 'assistant', 'tool']);
+     return (messages || []).map((msg) => {
+       if (!msg || typeof msg !== 'object') return null;
+       let role = typeof msg.role === 'string' ? msg.role.trim().toLowerCase() : null;
+       if (!role) {
+         if (msg.tool_call_id || msg.toolCallId) role = 'tool';
+         else if (msg.tool_calls || msg.toolCalls) role = 'assistant';
+         else if (msg.content !== undefined) role = 'assistant';
+       }
+       if (!validRoles.has(role)) {
+         if (this.debug) console.warn(`⚠️ Skipping invalid message role: ${String(msg.role)}`);
+         return null;
+       }
+       const sanitized = { role, content: msg.content ?? '' };
+
+       // Handle Assistant Tool Calls (Check BOTH names)
+       const toolCalls = msg.tool_calls || msg.toolCalls;
+       if (role === 'assistant' && Array.isArray(toolCalls) && toolCalls.length > 0) {
+         sanitized.tool_calls = toolCalls.map((tc) => ({
+           id: tc.id || `call_${Date.now()}`,
+           type: tc.type || 'function',
+           function: {
+             name: tc.function?.name || '',
+             arguments: tc.function?.arguments || ''
+           }
+         }));
+       }
+
+       // Handle Tool Responses (Check BOTH names)
+       if (role === 'tool') {
+         sanitized.tool_call_id = msg.tool_call_id || msg.toolCallId;
+       }
+
+       return sanitized;
+     }).filter(Boolean);
+   }
 
   // ---------------------------------------------------------------------------
   // Tool validation & execution
@@ -59,25 +65,25 @@ export class ResponseProcessor {
 
   /**
    * Validates tool call structure and logs for debugging.
-   * @param {Object} toolCall
+   * @param {Object} tool_call
    * @returns {boolean}
    */
-  validateToolCall(toolCall) {
-    if (!toolCall) {
+  validatetool_call(tool_call) {
+    if (!tool_call) {
       console.warn('⚠️ Invalid tool call: null or undefined');
       return false;
     }
-    if (!toolCall.id) {
-      console.warn(`⚠️ Tool call missing ID: ${toolCall.function?.name || 'unknown'}`);
-      console.warn(`   Tool call structure:`, JSON.stringify(toolCall, null, 2));
+    if (!tool_call.id) {
+      console.warn(`⚠️ Tool call missing ID: ${tool_call.function?.name || 'unknown'}`);
+      console.warn(`   Tool call structure:`, JSON.stringify(tool_call, null, 2));
       return false;
     }
-    if (!toolCall.function) {
-      console.warn(`⚠️ Tool call missing function: ID=${toolCall.id}`);
+    if (!tool_call.function) {
+      console.warn(`⚠️ Tool call missing function: ID=${tool_call.id}`);
       return false;
     }
-    if (!toolCall.function.name) {
-      console.warn(`⚠️ Tool call function missing name: ID=${toolCall.id}`);
+    if (!tool_call.function.name) {
+      console.warn(`⚠️ Tool call function missing name: ID=${tool_call.id}`);
       return false;
     }
     return true;
@@ -103,45 +109,45 @@ export class ResponseProcessor {
 
   /**
    * Executes a single tool call with Circuit Breaker protection.
-   * @param {Object} toolCall
+   * @param {Object} tool_call
    * @returns {Promise<Object>} - Tool result message
    */
-  async executeToolWithCircuitBreaker(toolCall) {
+  async executeToolWithCircuitBreaker(tool_call) {
     const { circuitBreaker, handlers, loopDetector } = this.agent;
 
-    if (!this.validateToolCall(toolCall)) {
+    if (!this.validatetool_call(tool_call)) {
       return {
         role: "tool",
         content: JSON.stringify({ status: "error", message: "Invalid tool call structure" }),
-        toolCallId: toolCall.id
+        tool_call_id: tool_call.id
       };
     }
 
     const signature = loopDetector.getCallSignature(
-      toolCall.function.name, toolCall.function.arguments
+      tool_call.function.name, tool_call.function.arguments
     );
     const allowResult = circuitBreaker.shouldAllowCall(signature);
 
     if (!allowResult.allow) {
       const cooldownRemaining = allowResult.cooldownRemaining || 0;
       const errorMessage =
-        `Circuit breaker is OPEN for tool "${toolCall.function.name}". ` +
+        `Circuit breaker is OPEN for tool "${tool_call.function.name}". ` +
         `Please refine your prompt or wait ${Math.ceil(cooldownRemaining / 1000)} seconds.`;
-      console.warn(`⚠️ Circuit breaker blocked tool call: ${toolCall.function.name}`);
+      console.warn(`⚠️ Circuit breaker blocked tool call: ${tool_call.function.name}`);
       console.warn(`   Reason: ${allowResult.reason}`);
       console.warn(`   Cooldown remaining: ${cooldownRemaining}ms`);
       return {
         role: "tool",
         content: JSON.stringify({ status: "error", message: errorMessage }),
-        toolCallId: toolCall.id
+        tool_call_id: tool_call.id
       };
     }
 
     try {
-      const handler = handlers[toolCall.function.name];
-      if (!handler) throw new Error(`No handler for tool: ${toolCall.function.name}`);
+      const handler = handlers[tool_call.function.name];
+      if (!handler) throw new Error(`No handler for tool: ${tool_call.function.name}`);
 
-      const args = JSON.parse(toolCall.function.arguments || "{}");
+      const args = JSON.parse(tool_call.function.arguments || "{}");
 
       // Extract meta-arguments using the helper method
       const { cleanArgs, meta } = this._interceptMetaArguments(args);
@@ -158,9 +164,9 @@ export class ResponseProcessor {
         this.agent._captureProgressIntent({
           choices: [{
             message: {
-              toolCalls: [{
+              tool_calls: [{
                 function: {
-                  name: toolCall.function.name,
+                  name: tool_call.function.name,
                   arguments: JSON.stringify({ taskProgress: meta.taskProgress })
                 }
               }]
@@ -181,15 +187,15 @@ export class ResponseProcessor {
       return {
         role: "tool",
         content: typeof result === "object" ? JSON.stringify(result) : String(result),
-        toolCallId: toolCall.id
+        tool_call_id: tool_call.id
       };
     } catch (error) {
       circuitBreaker.recordFailure(signature, `Tool execution error: ${error.message}`);
-      console.error(`Error processing tool call ${toolCall.function.name}:`, error);
+      console.error(`Error processing tool call ${tool_call.function.name}:`, error);
       return {
         role: "tool",
         content: JSON.stringify({ status: "error", message: error.message }),
-        toolCallId: toolCall.id
+        tool_call_id: tool_call.id
       };
     }
   }
@@ -235,21 +241,21 @@ export class ResponseProcessor {
    * Returns null if blocked (caller should return early), otherwise the results array.
    *
    * Note: By default, tool calls are assumed to be independent and can be executed in parallel.
-   * If tools have dependencies (e.g., ToolB requires the output of ToolA), set `parallelToolCalls: false`
+   * If tools have dependencies (e.g., ToolB requires the output of ToolA), set `paralleltool_calls: false`
    * in the agent configuration to ensure sequential execution.
    *
-   * @param {Array} toolCalls
+   * @param {Array} tool_calls
    * @param {string} context - 'non-streaming' | 'streaming' for log messages
    * @returns {Promise<{toolResults: Array, allCallsSuccessful: boolean}|null>}
    */
-  async _runToolCalls(toolCalls, context = '') {
-    const { circuitBreaker, loopDetector, parallelToolCalls } = this.agent;
+  async _runtool_calls(tool_calls, context = '') {
+    const { circuitBreaker, loopDetector, paralleltool_calls } = this.agent;
     const suffix = context ? ` in ${context} response` : '';
 
-    const toolCallSignatures = toolCalls.map(tc =>
+    const tool_callsignatures = tool_calls.map(tc =>
       loopDetector.getCallSignature(tc.function.name, tc.function.arguments)
     );
-    const blockedCalls = toolCallSignatures.filter(sig => !circuitBreaker.shouldAllowCall(sig).allow);
+    const blockedCalls = tool_callsignatures.filter(sig => !circuitBreaker.shouldAllowCall(sig).allow);
 
     if (blockedCalls.length > 0) {
       console.warn(`⚠️ Circuit breaker blocked ${blockedCalls.length} tool call(s)${suffix}.`);
@@ -257,7 +263,7 @@ export class ResponseProcessor {
     }
 
     // Execute tool calls (parallel or sequential)
-    const toolResults = await this._executeToolCalls(toolCalls, parallelToolCalls);
+    const toolResults = await this._executetool_calls(tool_calls, paralleltool_calls);
 
     // Check if all calls were successful
     const allCallsSuccessful = toolResults.every(result =>
@@ -269,19 +275,19 @@ export class ResponseProcessor {
 
   /**
    * Executes tool calls either in parallel or sequentially.
-   * @param {Array} toolCalls - Array of tool calls to execute
+   * @param {Array} tool_calls - Array of tool calls to execute
    * @param {boolean} parallel - Whether to execute in parallel
    * @returns {Promise<Array>} - Array of tool result messages
    */
-  async _executeToolCalls(toolCalls, parallel) {
+  async _executetool_calls(tool_calls, parallel) {
     if (parallel) {
       // Parallel execution for independent tools
-      return Promise.all(toolCalls.map(tc => this.executeToolWithCircuitBreaker(tc)));
+      return Promise.all(tool_calls.map(tc => this.executeToolWithCircuitBreaker(tc)));
     } else {
       // Sequential execution for potentially dependent tools
       const results = [];
-      for (const toolCall of toolCalls) {
-        results.push(await this.executeToolWithCircuitBreaker(toolCall));
+      for (const tool_call of tool_calls) {
+        results.push(await this.executeToolWithCircuitBreaker(tool_call));
       }
       return results;
     }
@@ -310,8 +316,8 @@ export class ResponseProcessor {
       currentMessages.push(assistantMsg);
 
       // Termination condition 1: No tool calls - task completed
-      const toolCalls = assistantMsg.toolCalls;
-      if (!toolCalls || toolCalls.length === 0) {
+      const tool_calls = assistantMsg.tool_calls;
+      if (!tool_calls || tool_calls.length === 0) {
         if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No tool calls, task finished`);
         return {
           response: assistantMsg.content,
@@ -343,7 +349,7 @@ export class ResponseProcessor {
       }
 
       // Execute tools with circuit breaker
-      const runResult = await this._runToolCalls(toolCalls, 'recursive');
+      const runResult = await this._runtool_calls(tool_calls, 'recursive');
       if (!runResult) {
         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
         return {
@@ -356,10 +362,10 @@ export class ResponseProcessor {
 
       const { toolResults, allCallsSuccessful } = runResult;
       currentMessages.push(...toolResults); // Critical Fix: Update history with tool results
-      loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+      loopDetector.updateRecenttool_calls(tool_calls, allCallsSuccessful);
 
       // Post-execution loop check
-      if (loopDetector.detectToolCallLoop(toolCalls)) {
+      if (loopDetector.detecttool_callLoop(tool_calls)) {
         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
         return {
           response: "Loop detected: Agent stopped to prevent infinite recursion.",
@@ -423,9 +429,9 @@ export class ResponseProcessor {
 
     while (round <= maxRounds) {
       if (this.debug) console.log(`🔄 [STREAM REACT LOOP] Round ${round} started`);
-      // Use camelCase: SDK outbound schema expects toolCalls
-      let assistantMessage = { role: "assistant", content: "", toolCalls: [] };
-      const toolCallAccumulator = new Map();
+      // Use camelCase: SDK outbound schema expects tool_calls
+      let assistantMessage = { role: "assistant", content: "", tool_calls: [] };
+      const tool_callAccumulator = new Map();
 
       // Consume the stream
       for await (const chunk of currentStream) {
@@ -437,23 +443,24 @@ export class ResponseProcessor {
           if (onChunk) onChunk(delta.content);
         }
 
-        const streamingToolCalls = delta.toolCalls;
-        if (streamingToolCalls) {
-          for (const tc of streamingToolCalls) {
-            const index = tc.index ?? 0;
-            if (!toolCallAccumulator.has(index)) {
-              toolCallAccumulator.set(index, { id: tc.id || "", function: { name: "", arguments: "" } });
-            }
-            const current = toolCallAccumulator.get(index);
-            if (tc.id) current.id = tc.id;
-            if (tc.function?.name) current.function.name += tc.function.name;
-            if (tc.function?.arguments) current.function.arguments += tc.function.arguments;
-          }
-        }
+         // FIX: Check both naming conventions from the SDK delta
+         const streamingtool_calls = delta.tool_calls || delta.toolCalls;
+         if (streamingtool_calls) {
+           for (const tc of streamingtool_calls) {
+             const index = tc.index ?? 0;
+             if (!tool_callAccumulator.has(index)) {
+               tool_callAccumulator.set(index, { id: tc.id || "", function: { name: "", arguments: "" } });
+             }
+             const current = tool_callAccumulator.get(index);
+             if (tc.id) current.id = tc.id;
+             if (tc.function?.name) current.function.name += tc.function.name;
+             if (tc.function?.arguments) current.function.arguments += tc.function.arguments;
+           }
+         }
       }
 
       // Finalize tool calls - preserve original IDs to avoid mismatch
-      const accumulated = Array.from(toolCallAccumulator.values()).map((tc, i) => ({
+      const accumulated = Array.from(tool_callAccumulator.values()).map((tc, i) => ({
         id: tc.id || `call_${Date.now()}_${i}`,
         type: "function",
         function: {
@@ -462,17 +469,17 @@ export class ResponseProcessor {
         }
       }));
       if (accumulated.length > 0) {
-        assistantMessage.toolCalls = accumulated;
+        assistantMessage.tool_calls = accumulated;
         // Keep tool-call assistant messages API-compliant
         assistantMessage.content = assistantMessage.content || "";
       } else {
-        delete assistantMessage.toolCalls;
+        delete assistantMessage.tool_calls;
       }
 
       currentMessages.push(assistantMessage);
 
       // Termination 1: Success
-      if (!assistantMessage.toolCalls || assistantMessage.toolCalls.length === 0) {
+      if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
         return { response: assistantMessage.content, fullMessages: currentMessages, rounds: round, status: "success" };
       }
 
@@ -482,30 +489,30 @@ export class ResponseProcessor {
       }
 
       // Termination 3: Loop Detection
-      if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
+      if (loopDetector.detecttool_callLoop(assistantMessage.tool_calls)) {
         return { response: "Loop detected.", fullMessages: currentMessages, rounds: round, status: "loopDetected" };
       }
 
       // Execute Tools
-      const runResult = await this._runToolCalls(assistantMessage.toolCalls, 'streaming');
+      const runResult = await this._runtool_calls(assistantMessage.tool_calls, 'streaming');
       if (!runResult) return { response: "Blocked by CB.", fullMessages: currentMessages, rounds: round, status: "blocked" };
 
       const normalizedToolResults = runResult.toolResults.map((msg) => ({
         role: "tool",
         content: msg.content || JSON.stringify({ status: "success", message: "Tool executed successfully" }),
-        toolCallId: msg.toolCallId || msg.id
+        tool_call_id: msg.tool_call_id || msg.id
       }));
 
       currentMessages.push(...normalizedToolResults);
-      loopDetector.updateRecentToolCalls(assistantMessage.toolCalls, runResult.allCallsSuccessful);
+      loopDetector.updateRecenttool_calls(assistantMessage.tool_calls, runResult.allCallsSuccessful);
 
       const apiMessages = currentMessages.map((msg) => {
-        const tcs = msg.toolCalls;
+        const tcs = msg.tool_calls;
         if (msg.role === "assistant" && tcs) {
           return {
             role: "assistant",
             content: msg.content ?? "",
-            toolCalls: tcs.map((tc) => ({
+            tool_calls: tcs.map((tc) => ({
               id: tc.id,
               type: "function",
               function: {
@@ -519,7 +526,7 @@ export class ResponseProcessor {
           return {
             role: "tool",
             content: msg.content ?? "",
-            toolCallId: msg.toolCallId
+            tool_call_id: msg.tool_call_id
           };
         }
         return msg;

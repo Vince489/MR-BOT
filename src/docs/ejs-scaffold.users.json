@@ -1,0 +1,38 @@
+[{
+  "_id": {
+    "$oid": "69da133cce0a6ac44d9c5a0e"
+  },
+  "email": "test5@example.com",
+  "password": "$argon2id$v=19$m=65536,t=3,p=4$meaoKzUJb+5c8R5jo5OYUQ$FGkdIKByGGVPgNh7N06ZnRz8x5yTDGJzJKKNVIB5R+E",
+  "passwordHistory": [],
+  "isVerified": false,
+  "failedLoginAttempts": 0,
+  "lockedUntil": null,
+  "lockReason": null,
+  "role": "user",
+  "resetPasswordToken": null,
+  "resetPasswordExpire": null,
+  "passwordResetByAdmin": false,
+  "refreshTokens": [
+    {
+      "token": "$argon2id$v=19$m=65536,t=3,p=4$VaPsc+JZZGAEZ7tD/8nmxA$gdKuDcJB/x16n3fkBzSBx7jrOpOYpSGQg1a5W3cBu5U",
+      "tokenId": "f7321272a32064e4f45755ee7fa52aec",
+      "expiresAt": {
+        "$date": "2026-04-18T09:27:31.765Z"
+      },
+      "_id": {
+        "$oid": "69da1403ce0a6ac44d9c5a11"
+      },
+      "createdAt": {
+        "$date": "2026-04-11T09:27:31.768Z"
+      }
+    }
+  ],
+  "createdAt": {
+    "$date": "2026-04-11T09:24:12.472Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-11T09:27:31.770Z"
+  },
+  "__v": 1
+}]

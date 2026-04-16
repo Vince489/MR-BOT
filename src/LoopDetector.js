@@ -10,7 +10,7 @@ export class LoopDetector {
    * @param {boolean} [config.enablePatternDetection=true] - Enable A->B->A->B detection
    */
   constructor(config = {}) {
-    this.recentToolCalls = [];
+    this.recenttool_calls = [];
     this.maxRecentCalls = config.maxRecentCalls || 3;
     this.loopThreshold = config.loopThreshold || 2;
     this.enablePatternDetection = config.enablePatternDetection !== false;
@@ -25,7 +25,7 @@ export class LoopDetector {
   getCallSignature(name, args) {
     try {
       const parsed = typeof args === 'string' ? JSON.parse(args) : args;
-      // Sort keys so {"a":1,"b":2} === {"b":2,"a":1}
+      // Sort keys so {"a":1,"b":2} === {"b":2,"a":1"}
       const normalized = Object.keys(parsed).sort().reduce((obj, key) => {
         obj[key] = parsed[key];
         return obj;
@@ -38,15 +38,19 @@ export class LoopDetector {
 
   /**
    * Detects if the same tool with the same arguments is being called repeatedly.
-   * @param {Array} toolCalls - Array of tool calls to check
+   * @param {Array} tool_calls - Array of tool calls to check
    * @returns {boolean} - True if a loop is detected
    */
-  detectToolCallLoop(toolCalls) {
+  detecttool_callLoop(tool_calls) {
     // Single-call check: same signature failed loopThreshold times
-    if (toolCalls.length === 1) {
-      const call = toolCalls[0];
-      const callSignature = this.getCallSignature(call.function.name, call.function.arguments);
-      const recentMatches = this.recentToolCalls.filter(
+    if (tool_calls.length === 1) {
+      const call = tool_calls[0];
+      // Handle both camelCase and snake_case
+      const functionName = call.function?.name || call.functionName;
+      const functionArgs = call.function?.arguments || call.functionArguments;
+      const callSignature = this.getCallSignature(functionName, functionArgs);
+
+      const recentMatches = this.recenttool_calls.filter(
         tc => tc.signature === callSignature && tc.success === false
       );
       if (recentMatches.length >= this.loopThreshold) {
@@ -55,7 +59,7 @@ export class LoopDetector {
     }
 
     // Advanced A->B->A->B pattern detection
-    if (this.enablePatternDetection && this._detectComplexLoop(toolCalls)) {
+    if (this.enablePatternDetection && this._detectComplexLoop(tool_calls)) {
       return true;
     }
 
@@ -64,14 +68,14 @@ export class LoopDetector {
 
   /**
    * Detects complex looping patterns like A -> B -> A -> B.
-   * @param {Array} toolCalls
+   * @param {Array} tool_calls
    * @returns {boolean}
    * @private
    */
-  _detectComplexLoop(toolCalls) {
-    if (toolCalls.length === 0) return false;
+  _detectComplexLoop(tool_calls) {
+    if (tool_calls.length === 0) return false;
 
-    const recentCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
+    const recentCalls = this.recenttool_calls.slice(0, this.maxRecentCalls * 2);
     if (recentCalls.length >= 4) {
       const pattern = recentCalls.slice(0, 2);
       const nextPattern = recentCalls.slice(2, 4);
@@ -87,22 +91,26 @@ export class LoopDetector {
 
   /**
    * Updates the record of recent tool calls with proper state management.
-   * @param {Array} toolCalls - Array of tool calls
+   * @param {Array} tool_calls - Array of tool calls
    * @param {boolean} success - Whether the calls succeeded
    */
-  updateRecentToolCalls(toolCalls, success) {
-    const newCalls = toolCalls.map(tc => ({
-      signature: this.getCallSignature(tc.function.name, tc.function.arguments),
-      success: success,
-      timestamp: Date.now()
-    }));
+  updateRecenttool_calls(tool_calls, success) {
+    const newCalls = tool_calls.map(tc => {
+      // Handle both camelCase and snake_case
+      const functionName = tc.function?.name || tc.functionName;
+      const functionArgs = tc.function?.arguments || tc.functionArguments;
+      return {
+        signature: this.getCallSignature(functionName, functionArgs),
+        success: success,
+        timestamp: Date.now()
+      };
+    });
 
-    this.recentToolCalls.unshift(...newCalls);
+    this.recenttool_calls.unshift(...newCalls);
 
     // Keep only the most recent calls
-    if (this.recentToolCalls.length > this.maxRecentCalls * 2) {
-      this.recentToolCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
+    if (this.recenttool_calls.length > this.maxRecentCalls * 2) {
+      this.recenttool_calls = this.recenttool_calls.slice(0, this.maxRecentCalls * 2);
     }
   }
 }
-

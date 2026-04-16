@@ -1033,7 +1033,7 @@
     0.004177093505859375,
     -0.0210418701171875
   ],
-  "toolCalls": [],
+  "tool_calls": [],
   "metadata": {
     "tokens": 14,
     "model": "unknown",
@@ -1057,7 +1057,7 @@
   "role": "assistant",
   "content": "",
   "embedding": [],
-  "toolCalls": [
+  "tool_calls": [
     {
       "id": "si8YOO72P",
       "type": "function",
@@ -2118,8 +2118,8 @@
     0.0162353515625,
     0.00363922119140625
   ],
-  "toolCalls": [],
-  "toolCallId": "si8YOO72P",
+  "tool_calls": [],
+  "tool_call_id": "si8YOO72P",
   "metadata": {
     "tokens": 92,
     "model": "unknown",
@@ -3168,7 +3168,7 @@
     -0.0026493072509765625,
     0.0034122467041015625
   ],
-  "toolCalls": [],
+  "tool_calls": [],
   "metadata": {
     "tokens": 29,
     "model": "unknown",
