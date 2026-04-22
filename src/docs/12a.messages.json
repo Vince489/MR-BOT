@@ -1,0 +1,218 @@
+[{
+  "_id": {
+    "$oid": "69e90416d06989ba3eae291e"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "user",
+  "content": "hello",
+  "embedding": [],
+  "toolCalls": [],
+  "metadata": {
+    "tokens": 5,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e90416d06989ba3eae291f"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "assistant",
+  "content": "",
+  "embedding": [],
+  "toolCalls": [
+    {
+      "id": "G37hJcMfi",
+      "type": "function",
+      "function": {
+        "name": "recordThought",
+        "arguments": "{\"step\": \"Pre-tool reasoning\", \"hypothesis\": \"The user is initiating a conversation with a greeting, which typically indicates an opening to further interaction rather than a standalone statement.\", \"plan\": [\"Respond to the greeting to acknowledge the user.\", \"Ask an open-ended question to encourage further dialogue and understand the user's intent or needs.\"], \"context\": \"No prior context available as this appears to be the start of the conversation.\", \"userInput\": \"hello\", \"taskProgress\": \"- [ ] Respond to greeting\\n- [ ] Ask open-ended question\"}"
+      },
+      "_id": {
+        "$oid": "69e90416d06989ba3eae2920"
+      }
+    }
+  ],
+  "metadata": {
+    "tokens": 154,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e90416d06989ba3eae2921"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "tool",
+  "content": "{\"status\":\"success\",\"message\":\"Thought recorded successfully\",\"recorded_at\":\"2026-04-22T17:23:33.170Z\",\"summary\":{\"step\":\"Pre-tool reasoning\",\"plan_steps\":2,\"has_uncertainties\":false,\"storage\":{\"saved\":true,\"session\":\"69b1229049c08b5a9b43e123\",\"error\":null}},\"thought_id\":\"saved_to_mongodb\"}",
+  "embedding": [],
+  "toolCalls": [],
+  "toolCallId": "G37hJcMfi",
+  "metadata": {
+    "tokens": 92,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e90416d06989ba3eae2922"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "assistant",
+  "content": "Hello! How can I assist you today?",
+  "embedding": [],
+  "toolCalls": [],
+  "metadata": {
+    "tokens": 13,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:34.201Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e9042cd06989ba3eae292a"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "user",
+  "content": "tell me about yourself",
+  "embedding": [],
+  "toolCalls": [],
+  "metadata": {
+    "tokens": 8,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e9042cd06989ba3eae292b"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "assistant",
+  "content": "",
+  "embedding": [],
+  "toolCalls": [
+    {
+      "id": "WDMSCbbn2",
+      "type": "function",
+      "function": {
+        "name": "recordThought",
+        "arguments": "{\"step\": \"Pre-tool reasoning\", \"hypothesis\": \"The user is asking for information about my capabilities and role, likely to understand how I can assist them.\", \"plan\": [\"Provide a concise introduction about myself, including my name, role, and key capabilities.\", \"Mention my core objective to assist with technical and creative tasks.\", \"Offer to demonstrate any specific capabilities if the user is interested.\"], \"context\": \"The user has already greeted me and now wants to know more about what I can do.\", \"taskProgress\": \"- [ ] Provide introduction\\n- [ ] Mention core objective\\n- [ ] Offer to demonstrate capabilities\"}"
+      },
+      "_id": {
+        "$oid": "69e9042cd06989ba3eae292c"
+      }
+    }
+  ],
+  "metadata": {
+    "tokens": 170,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e9042cd06989ba3eae292d"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "tool",
+  "content": "{\"status\":\"success\",\"message\":\"Thought recorded successfully\",\"recorded_at\":\"2026-04-22T17:23:52.613Z\",\"summary\":{\"step\":\"Pre-tool reasoning\",\"plan_steps\":3,\"has_uncertainties\":false,\"storage\":{\"saved\":true,\"session\":\"69b1229049c08b5a9b43e123\",\"error\":null}},\"thought_id\":\"saved_to_mongodb\"}",
+  "embedding": [],
+  "toolCalls": [],
+  "toolCallId": "WDMSCbbn2",
+  "metadata": {
+    "tokens": 92,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69e9042cd06989ba3eae292e"
+  },
+  "session": {
+    "$oid": "69e90416d06989ba3eae291b"
+  },
+  "role": "assistant",
+  "content": "Hello! I'm Victor, an AI assistant designed to help with a variety of tasks. My capabilities include providing explanations and tutorials, assisting with problem-solving, offering current date and time information, and performing mathematical computations. My core objective is to assist you with both technical and creative tasks to the best of my ability. If you'd like, I can demonstrate any of these capabilities further. How can I assist you today?",
+  "embedding": [],
+  "toolCalls": [],
+  "metadata": {
+    "tokens": 88,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  },
+  "updatedAt": {
+    "$date": "2026-04-22T17:23:56.735Z"
+  }
+}]

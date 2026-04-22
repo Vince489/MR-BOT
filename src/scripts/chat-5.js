@@ -28,21 +28,37 @@ async function main() {
     enableEvents: true // Enable event system for progress tracking
   });
 
-  // Load existing history
-  const history = await agent.loadHistory();
+    // Load existing history
+    const history = await agent.loadHistory();
 
-  // Create readline interface
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: '\n💬 You: '
-  });
+    // Create readline interface
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: '\n💬 You: '
+    });
 
-  // Track current conversation messages
-  let messages = [...history];
-  
-  // Track the index of the last saved message to prevent duplicates
-  let lastSavedIndex = history.length;
+    // For restarting chat, we need to handle tool calls and responses carefully
+    // Only keep user and assistant messages (without tool calls) to avoid API errors
+    const filteredHistory = history.filter(msg => {
+      // Keep user messages
+      if (msg.role === 'user') return true;
+
+      // Keep assistant messages, but only if they don't contain tool calls
+      // This prevents the "Not the same number of function calls and responses" error
+      if (msg.role === 'assistant') {
+        return !msg.toolCalls || msg.toolCalls.length === 0;
+      }
+
+      // Filter out tool messages and assistant messages with tool calls
+      return false;
+    });
+
+    // Track current conversation messages
+    let messages = [...filteredHistory];
+
+    // Track the index of the last saved message to prevent duplicates
+    let lastSavedIndex = filteredHistory.length;
 
   // Display help on start
   printHelp();
