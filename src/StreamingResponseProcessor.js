@@ -222,19 +222,19 @@ export class StreamingResponseProcessor extends EventEmitter {
       }
 
       // Execute Tools with unified ToolExecutionManager
-      const toolExecutionManager = this.agent.toolExecutionManager;
-      if (!toolExecutionManager) {
-        throw new Error("ToolExecutionManager not initialized");
-      }
+       const toolExecutionManager = this.agent.toolExecutionManager;
+       if (!toolExecutionManager) {
+         throw new Error("ToolExecutionManager not initialized");
+       }
 
-      const toolActions = [];
-      const runResult = await toolExecutionManager.executetool_calls(
-        assistantMessage.tool_calls,
-        toolActions,
-        this.agent.userInput || "",
-        true, // parallel execution
-        null // no abort signal
-      );
+       const toolActions = [];
+       const runResult = await toolExecutionManager.executeToolCalls(
+         assistantMessage.tool_calls,
+         toolActions,
+         this.agent.userInput || "",
+         true, // parallel execution
+         null // no abort signal
+       );
 
       if (!runResult) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Circuit breaker protection activated`);

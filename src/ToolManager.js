@@ -9,7 +9,7 @@ export class ToolManager extends EventEmitter {
     super();
     this.handlers = {};
     this.apiTools = [];
-    this.recenttool_calls = [];
+    this.recentToolCalls = [];
     this.maxRecentCalls = 3;
   }
 
@@ -66,20 +66,20 @@ export class ToolManager extends EventEmitter {
 
   /**
    * Execute a single tool call
-   * @param {Object} tool_call - Tool call object
+   * @param {Object} toolCall - Tool call object
    * @param {Array} actionsTaken - Array to track actions
    * @param {string} userInput - User input for context
    * @param {number} retryCount - Current retry count
    * @param {AbortSignal} abortSignal - Abort signal for cancellation
    * @returns {Promise<Object>} Tool result
    */
-  async executetool_call(tool_call, actionsTaken, userInput, retryCount = 0, abortSignal) {
+  async executeToolCall(toolCall, actionsTaken, userInput, retryCount = 0, abortSignal) {
     // Handle both camelCase and snake_case
-    const functionName = tool_call.function?.name || tool_call.functionName;
-    const rawArgs = tool_call.function?.arguments || tool_call.functionArguments;
+    const functionName = toolCall.function?.name || toolCall.functionName;
+    const rawArgs = toolCall.function?.arguments || toolCall.functionArguments;
     const startTime = Date.now();
 
-    if (this.enableEvents) this.emit("tool-start", { tool: functionName, id: tool_call.id });
+    if (this.enableEvents) this.emit("tool-start", { tool: functionName, id: toolCall.id });
 
     try {
       const args = JSON.parse(rawArgs || "{}");
@@ -106,11 +106,11 @@ export class ToolManager extends EventEmitter {
       const result = await handler(validatedArgs, { agent: this.agent, userInput, signal: abortSignal });
       const duration = Date.now() - startTime;
 
-      actionsTaken.push({ id: tool_call.id, tool: functionName, args: validatedArgs, result, duration, ts: new Date() });
+      actionsTaken.push({ id: toolCall.id, tool: functionName, args: validatedArgs, result, duration, ts: new Date() });
 
       if (this.enableEvents) {
         this.emit("tool-metrics", { tool: functionName, duration, success: true });
-        this.emit("tool-end", { tool: functionName, id: tool_call.id, result });
+        this.emit("tool-end", { tool: functionName, id: toolCall.id, result });
       }
 
       // Debug logging
@@ -123,25 +123,25 @@ export class ToolManager extends EventEmitter {
       }
 
       // Update recent tool calls with success status
-      this._updateRecenttool_calls([tool_call], true);
+      this._updateRecentToolCalls([toolCall], true);
 
       return {
         role: "tool",
         name: functionName,
         content: typeof result === "object" ? JSON.stringify(result) : String(result),
-        tool_call_id: tool_call.id,
+        tool_call_id: toolCall.id,
       };
     } catch (error) {
       // Update recent tool calls with failure status before handling error
-      this._updateRecenttool_calls([tool_call], false);
-      return this._handleToolError(error, tool_call, actionsTaken, userInput, retryCount, startTime, abortSignal);
+      this._updateRecentToolCalls([toolCall], false);
+      return this._handleToolError(error, toolCall, actionsTaken, userInput, retryCount, startTime, abortSignal);
     }
   }
 
   /**
    * Handle tool execution errors with retry logic
    * @param {Error} error - Error object
-   * @param {Object} tool_call - Tool call object
+   * @param {Object} toolCall - Tool call object
    * @param {Array} actionsTaken - Array to track actions
    * @param {string} userInput - User input for context
    * @param {number} retryCount - Current retry count
@@ -149,16 +149,16 @@ export class ToolManager extends EventEmitter {
    * @param {AbortSignal} abortSignal - Abort signal for cancellation
    * @returns {Promise<Object>} Tool result
    */
-  async _handleToolError(error, tool_call, actionsTaken, userInput, retryCount, startTime, abortSignal) {
+  async _handleToolError(error, toolCall, actionsTaken, userInput, retryCount, startTime, abortSignal) {
     // Handle both camelCase and snake_case
-    const functionName = tool_call.function?.name || tool_call.functionName;
+    const functionName = toolCall.function?.name || toolCall.functionName;
 
     const isRetriable = error.message?.includes("rate limit") || error.code === "ETIMEDOUT";
     const maxRetries = 2;
 
     if (isRetriable && retryCount < maxRetries) {
       await new Promise((r) => setTimeout(r, Math.pow(2, retryCount) * 1000));
-      return this.executetool_call(tool_call, actionsTaken, userInput, retryCount + 1, abortSignal);
+      return this.executeToolCall(toolCall, actionsTaken, userInput, retryCount + 1, abortSignal);
     }
 
     console.error(`Tool Error [${functionName}]:`, error.message);
@@ -167,30 +167,30 @@ export class ToolManager extends EventEmitter {
       role: "tool",
       name: functionName,
       content: JSON.stringify({ status: "error", message: error.message }),
-      tool_call_id: tool_call.id,
+      tool_call_id: toolCall.id,
     };
   }
 
   /**
    * Execute multiple tool calls in parallel or sequentially
-   * @param {Array} tool_calls - Array of tool call objects
+   * @param {Array} toolCalls - Array of tool call objects
    * @param {Array} actionsTaken - Array to track actions
    * @param {string} userInput - User input for context
-   * @param {boolean} paralleltool_calls - Whether to execute in parallel
+   * @param {boolean} parallelToolCalls - Whether to execute in parallel
    * @param {AbortSignal} abortSignal - Abort signal for cancellation
    * @returns {Promise<Array>} Array of tool results
    */
-  async executetool_calls(tool_calls, actionsTaken, userInput, paralleltool_calls, abortSignal) {
-    if (paralleltool_calls) {
+  async executeToolCalls(toolCalls, actionsTaken, userInput, parallelToolCalls, abortSignal) {
+    if (parallelToolCalls) {
       return await Promise.all(
-        tool_calls.map((tool_call) =>
-          this.executetool_call(tool_call, actionsTaken, userInput, 0, abortSignal)
+        toolCalls.map((toolCall) =>
+          this.executeToolCall(toolCall, actionsTaken, userInput, 0, abortSignal)
         )
       );
     } else {
       const results = [];
-      for (const tool_call of tool_calls) {
-        const result = await this.executetool_call(tool_call, actionsTaken, userInput, 0, abortSignal);
+      for (const toolCall of toolCalls) {
+        const result = await this.executeToolCall(toolCall, actionsTaken, userInput, 0, abortSignal);
         results.push(result);
       }
       return results;
@@ -199,20 +199,20 @@ export class ToolManager extends EventEmitter {
 
   /**
    * Check for recursive tool call loops
-   * @param {Array} tool_calls - Array of tool calls to check
+   * @param {Array} toolCalls - Array of tool calls to check
    * @returns {boolean} - True if a loop is detected
    */
-  detecttool_callLoop(tool_calls) {
+  detectToolCallLoop(toolCalls) {
     // If we have only one tool call, check if it matches the last failed call
-    if (tool_calls.length === 1) {
-      const call = tool_calls[0];
+    if (toolCalls.length === 1) {
+      const call = toolCalls[0];
       // Handle both camelCase and snake_case
       const functionName = call.function?.name || call.functionName;
       const functionArgs = call.function?.arguments || call.functionArguments;
       const callSignature = `${functionName}:${functionArgs}`;
 
       // Check if this exact call was made in the last 2 steps and failed
-      const recentMatches = this.recenttool_calls.filter(
+      const recentMatches = this.recentToolCalls.filter(
         tc => tc.signature === callSignature && tc.success === false
       );
 
@@ -226,12 +226,12 @@ export class ToolManager extends EventEmitter {
 
   /**
    * Update the record of recent tool calls
-   * @param {Array} tool_calls - Array of tool calls
+   * @param {Array} toolCalls - Array of tool calls
    * @param {boolean} success - Whether the calls succeeded
    */
-  _updateRecenttool_calls(tool_calls, success) {
+  _updateRecentToolCalls(toolCalls, success) {
     // Add current tool calls to the beginning of the array
-    const newCalls = tool_calls.map(tc => {
+    const newCalls = toolCalls.map(tc => {
       // Handle both camelCase and snake_case
       const functionName = tc.function?.name || tc.functionName;
       const functionArgs = tc.function?.arguments || tc.functionArguments;
@@ -242,34 +242,34 @@ export class ToolManager extends EventEmitter {
       };
     });
 
-    this.recenttool_calls.unshift(...newCalls);
+    this.recentToolCalls.unshift(...newCalls);
 
     // Keep only the most recent calls
-    if (this.recenttool_calls.length > this.maxRecentCalls * 2) {
-      this.recenttool_calls = this.recenttool_calls.slice(0, this.maxRecentCalls * 2);
+    if (this.recentToolCalls.length > this.maxRecentCalls * 2) {
+      this.recentToolCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
     }
   }
 
   /**
    * Generate a Mermaid.js diagram for tool call flows
-   * @param {Array} tool_calls - Array of tool calls
+   * @param {Array} toolCalls - Array of tool calls
    * @returns {string} - Mermaid.js diagram string
    */
-  generateMermaidDiagram(tool_calls) {
+  generateMermaidDiagram(toolCalls) {
     let diagram = "```mermaid\ngraph TD\n";
 
     // Add user query node
     diagram += "  A[User Query] --> B{Tool Needed?}\n";
 
     // Add tool call nodes
-    tool_calls.forEach((tool_call, index) => {
+    toolCalls.forEach((toolCall, index) => {
       // Handle both camelCase and snake_case
-      const functionName = tool_call.function?.name || tool_call.functionName;
+      const functionName = toolCall.function?.name || toolCall.functionName;
       const nodeId = `C${index}`;
       diagram += `  B -->|Yes| ${nodeId}[${functionName}]\n`;
 
       // If there are arguments, add them as a note
-      const functionArgs = tool_call.function?.arguments || tool_call.functionArguments;
+      const functionArgs = toolCall.function?.arguments || toolCall.functionArguments;
       if (functionArgs) {
         const argsNodeId = `D${index}`;
         try {
@@ -284,7 +284,7 @@ export class ToolManager extends EventEmitter {
     diagram += "  B -->|No| E[Generate Response]\n";
 
     // Connect tool results to final response
-    tool_calls.forEach((_, index) => {
+    toolCalls.forEach((_, index) => {
       const nodeId = `C${index}`;
       diagram += `  ${nodeId} --> E\n`;
     });
