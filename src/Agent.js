@@ -50,7 +50,7 @@ export class Agent extends EventEmitter {
     });
 
 this.model = config.model || "mistral-medium-2505";
-    this.temperature = config.temperature !== undefined ? config.temperature : 0.5;
+    this.temperature = config.temperature !== undefined ? config.temperature : 0.3;
 this.tools = config.tools || [];
 this.systemPrompt = (config.tools && config.tools.length > 0)
   ? this._injectProgressTrackingProtocol(config.systemPrompt)
