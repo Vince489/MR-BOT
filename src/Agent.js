@@ -1,4 +1,6 @@
 import { Mistral } from "@mistralai/mistralai";
+import Thought from './models/Thought.js';
+import Session from './models/Session.js';
 import { EventEmitter } from "events";
 import { CircuitBreaker } from "./CircuitBreaker.js";
 import { LoopDetector } from "./LoopDetector.js";
@@ -50,7 +52,7 @@ export class Agent extends EventEmitter {
     });
 
 this.model = config.model || "mistral-medium-2505";
-    this.temperature = config.temperature !== undefined ? config.temperature : 0.3;
+    this.temperature = config.temperature !== undefined ? config.temperature : 0.5;
 this.tools = config.tools || [];
 this.systemPrompt = (config.tools && config.tools.length > 0)
   ? this._injectProgressTrackingProtocol(config.systemPrompt)
@@ -308,9 +310,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     // Save thought data to MongoDB
     if (parsed.thought_data) {
       try {
-        const Thought = (await import('../models/Thought.js')).default;
-        const Session = (await import('../models/Session.js')).default;
-
         // Find the session by sessionId
         const session = await Session.findOne({ sessionId: this.sessionId });
 
@@ -401,7 +400,19 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     });
 
     // Process the stream and handle the structured response
-    const result = await this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
+    let result;
+    try {
+      result = await this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
+    } catch (error) {
+      console.error("Failed to process stream response:", error);
+      return { response: "An error occurred while processing the response." };
+    }
+
+    // Ensure result is valid and has a response property
+    if (!result || !result.response) {
+      console.error("Invalid result from processStreamResponse:", result);
+      return { response: "An error occurred while processing the response." };
+    }
 
     // Parse the structured response and save thoughts to MongoDB
     const rawContent = result.response;
@@ -418,9 +429,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     // Save thought data to MongoDB
     if (parsed?.thought_data) {
       try {
-        const Thought = (await import('../models/Thought.js')).default;
-        const Session = (await import('../models/Session.js')).default;
-
         // Find the session by sessionId
         const session = await Session.findOne({ sessionId: this.sessionId });
 
@@ -853,7 +861,4 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     // Rough approximation: 4 characters per token
     return Math.ceil(totalChars / 4);
   }
-
-
-
 }
