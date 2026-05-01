@@ -360,7 +360,7 @@ export class ToolManager extends EventEmitter {
 
       // Debug logging
       if (this.debug) {
-        console.log(`[DEBUG] Task Progress for ${toolName}:`);
+        console.log(`[DEBUG] Current Conversation Progress:`);
         console.log(`[DEBUG] Total items: ${totalCount}, Completed: ${completedCount}`);
         progressItems.forEach(item => {
           console.log(`[DEBUG] - [${item.status === 'completed' ? 'x' : ' '}] ${item.description}`);

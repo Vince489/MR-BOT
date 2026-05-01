@@ -115,6 +115,9 @@ export class StreamingResponseProcessor extends EventEmitter {
     while (round <= maxRounds) {
       if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} started`);
 
+      // Reset progress state for each new turn to ensure independent progress tracking
+      this.agent.clearProgress();
+
       // Use camelCase: SDK outbound schema expects toolCalls
       let assistantMessage = { role: "assistant", content: "", toolCalls: [] };
       const toolCallAccumulator = new Map();

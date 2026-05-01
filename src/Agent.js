@@ -305,22 +305,31 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
      const rawContent = response.choices[0].message.content;
      const parsed = JSON.parse(rawContent);
 
-     // Save thought data to MongoDB
-     if (parsed.thought_data) {
-       try {
-         const Thought = (await import('../models/Thought.js')).default;
-         const newThought = new Thought({
-           session: this.sessionId,
-           userInput: userInput,
-           ...parsed.thought_data,
-           agentId: "mistral-large-enforced"
-         });
-         await newThought.save();
-         console.log(`💾 Thought persisted to DB: ${newThought._id}`);
-       } catch (err) {
-         console.error("Failed to save thought:", err);
-       }
-     }
+    // Save thought data to MongoDB
+    if (parsed.thought_data) {
+      try {
+        const Thought = (await import('../models/Thought.js')).default;
+        const Session = (await import('../models/Session.js')).default;
+
+        // Find the session by sessionId
+        const session = await Session.findOne({ sessionId: this.sessionId });
+
+        if (session) {
+          const newThought = new Thought({
+            session: session._id, // Use the ObjectId of the session
+            userInput: userInput,
+            ...parsed.thought_data,
+            agentId: "mistral-large-enforced"
+          });
+          await newThought.save();
+          console.log(`💾 Thought persisted to DB: ${newThought._id}`);
+        } else {
+          console.warn(`⚠️ Could not save thought: Session ${this.sessionId} not found`);
+        }
+      } catch (err) {
+        console.error("Failed to save thought:", err);
+      }
+    }
 
      return this.responseProcessor.processResponse(response, messages);
    }
@@ -410,14 +419,23 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     if (parsed?.thought_data) {
       try {
         const Thought = (await import('../models/Thought.js')).default;
-        const newThought = new Thought({
-          session: this.sessionId,
-          userInput: userInput,
-          ...parsed.thought_data,
-          agentId: "mistral-large-enforced"
-        });
-        await newThought.save();
-        console.log(`💾 Thought persisted to DB: ${newThought._id}`);
+        const Session = (await import('../models/Session.js')).default;
+
+        // Find the session by sessionId
+        const session = await Session.findOne({ sessionId: this.sessionId });
+
+        if (session) {
+          const newThought = new Thought({
+            session: session._id, // Use the ObjectId of the session
+            userInput: userInput,
+            ...parsed.thought_data,
+            agentId: "mistral-large-enforced"
+          });
+          await newThought.save();
+          console.log(`💾 Thought persisted to DB: ${newThought._id}`);
+        } else {
+          console.warn(`⚠️ Could not save thought: Session ${this.sessionId} not found`);
+        }
       } catch (err) {
         console.error("Failed to save thought:", err);
       }
@@ -640,6 +658,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
   clearProgress() {
     this.currentProgress = "";
     this.progressHistory = [];
+    this.progressState = new Map(); // Reset the progress state map
     this.emit('progress-cleared');
   }
 
