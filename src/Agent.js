@@ -396,27 +396,31 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
     // Parse the structured response and save thoughts to MongoDB
     const rawContent = result.response;
+    let parsed = null;
     try {
-      const parsed = JSON.parse(rawContent);
-
-      // Save thought data to MongoDB
-      if (parsed.thought_data) {
-        try {
-          const Thought = (await import('../models/Thought.js')).default;
-          const newThought = new Thought({
-            session: this.sessionId,
-            userInput: userInput,
-            ...parsed.thought_data,
-            agentId: "mistral-large-enforced"
-          });
-          await newThought.save();
-          console.log(`💾 Thought persisted to DB: ${newThought._id}`);
-        } catch (err) {
-          console.error("Failed to save thought:", err);
-        }
+      // Only attempt to parse as JSON if the content looks like JSON
+      if (rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}')) {
+        parsed = JSON.parse(rawContent);
       }
     } catch (parseError) {
       console.error("Failed to parse structured response:", parseError);
+    }
+
+    // Save thought data to MongoDB
+    if (parsed?.thought_data) {
+      try {
+        const Thought = (await import('../models/Thought.js')).default;
+        const newThought = new Thought({
+          session: this.sessionId,
+          userInput: userInput,
+          ...parsed.thought_data,
+          agentId: "mistral-large-enforced"
+        });
+        await newThought.save();
+        console.log(`💾 Thought persisted to DB: ${newThought._id}`);
+      } catch (err) {
+        console.error("Failed to save thought:", err);
+      }
     }
 
     return result;

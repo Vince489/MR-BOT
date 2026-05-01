@@ -164,16 +164,21 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       currentMessages.push(assistantMessage);
 
-      // Check if the response is a structured JSON
-      let parsedContent;
-      try {
+    // Check if the response is a structured JSON
+    let parsedContent;
+    let isStructuredResponse = false;
+    try {
+      // Only attempt to parse as JSON if the content looks like JSON
+      if (assistantMessage.content.trim().startsWith('{') && assistantMessage.content.trim().endsWith('}')) {
         parsedContent = JSON.parse(assistantMessage.content);
-      } catch (e) {
-        // Not a JSON response, proceed as usual
+        isStructuredResponse = true;
       }
+    } catch (e) {
+      // Not a JSON response, proceed as usual
+    }
 
-      // If it's a structured response, handle it
-      if (parsedContent) {
+    // If it's a structured response, handle it
+    if (isStructuredResponse && parsedContent) {
         if (this.debug) console.log(`📊 [STREAM LOOP] Round ${round} - Structured response detected`);
 
         // Extract the final reply and requested tools
