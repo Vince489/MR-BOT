@@ -297,96 +297,172 @@ export class ResponseProcessor {
    * @param {Array} messages - Conversation messages
    * @returns {Promise<{response: string, fullMessages: Array, rounds: number, status: string}>}
    */
-  async processResponse(response, messages) {
-    let currentResponse = response;
-    let currentMessages = [...messages];
-    let round = 1;
-    const { client, model, loopDetector, maxRounds = 10 } = this.agent;
+   async processResponse(response, messages) {
+     let currentResponse = response;
+     let currentMessages = [...messages];
+     let round = 1;
+     const { client, model, loopDetector, maxRounds = 10 } = this.agent;
 
-    while (round <= maxRounds) {
-      if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} started`);
+     while (round <= maxRounds) {
+       if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} started`);
 
-      const assistantMsg = currentResponse.choices[0].message;
-      currentMessages.push(assistantMsg);
+       const assistantMsg = currentResponse.choices[0].message;
+       currentMessages.push(assistantMsg);
 
-      // Termination condition 1: No tool calls - task completed
-      const toolCalls = assistantMsg.toolCalls;
-      if (!toolCalls || toolCalls.length === 0) {
-        if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No tool calls, task finished`);
-        return {
-          response: assistantMsg.content,
-          fullMessages: currentMessages,
-          rounds: round,
-          status: "success"
-        };
-      }
+       // Check if the response is a structured JSON
+       let parsedContent;
+       try {
+         parsedContent = JSON.parse(assistantMsg.content);
+       } catch (e) {
+         // Not a JSON response, proceed as usual
+       }
 
-      // Termination: Hard Stop on Context
-      if (!this._hasRoomForNextRound(currentMessages)) {
-        return {
-          response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
-          fullMessages: currentMessages,
-          rounds: round,
-          status: "contextOverflow"
-        };
-      }
+       // If it's a structured response, handle it
+       if (parsedContent) {
+         if (this.debug) console.log(`📊 [REACT LOOP] Round ${round} - Structured response detected`);
 
-      // Termination condition 2: Max rounds reached
-      if (round >= maxRounds) {
-        if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Maximum rounds reached. Task may require manual intervention.`);
-        return {
-          response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
-          fullMessages: currentMessages,
-          rounds: round,
-          status: "maxRounds"
-        };
-      }
+         // Extract the final reply and requested tools
+         const finalReply = parsedContent.final_reply;
+         const requestedTools = parsedContent.requested_tools || [];
 
-      // Execute tools with circuit breaker
-      const runResult = await this._runToolCalls(toolCalls, 'recursive');
-      if (!runResult) {
-        if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
-        return {
-          response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
-          fullMessages: currentMessages,
-          rounds: round,
-          status: "blocked"
-        };
-      }
+         // If there are no requested tools, return the final reply
+         if (requestedTools.length === 0) {
+           if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No requested tools, task finished`);
+           return {
+             response: finalReply,
+             fullMessages: currentMessages,
+             rounds: round,
+             status: "success"
+           };
+         }
 
-      const { toolResults, allCallsSuccessful } = runResult;
-      currentMessages.push(...toolResults); // Critical Fix: Update history with tool results
-      loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+         // Convert requested tools to tool calls format
+         const toolCalls = requestedTools.map((tool, index) => ({
+           id: `call_${Date.now()}_${index}`,
+           type: "function",
+           function: {
+             name: tool.tool,
+             arguments: JSON.stringify(tool.arguments)
+           }
+         }));
 
-      // Post-execution loop check
-      if (loopDetector.detectToolCallLoop(toolCalls)) {
-        if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
-        return {
-          response: "Loop detected: Agent stopped to prevent infinite recursion.",
-          fullMessages: currentMessages,
-          rounds: round,
-          status: "loopDetected"
-        };
-      }
+         // Execute tools with circuit breaker
+         const runResult = await this._runToolCalls(toolCalls, 'recursive');
+         if (!runResult) {
+           if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
+           return {
+             response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
+             fullMessages: currentMessages,
+             rounds: round,
+             status: "blocked"
+           };
+         }
 
-      // Update progress tracking after tool execution
-      this.updateTaskProgress();
+         const { toolResults, allCallsSuccessful } = runResult;
+         currentMessages.push(...toolResults);
+         loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
 
-      // Prepare for next round
-      const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-      currentResponse = await client.chat.complete({ model, messages: apiMessages });
+         // Post-execution loop check
+         if (loopDetector.detectToolCallLoop(toolCalls)) {
+           if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
+           return {
+             response: "Loop detected: Agent stopped to prevent infinite recursion.",
+             fullMessages: currentMessages,
+             rounds: round,
+             status: "loopDetected"
+           };
+         }
 
-      if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
-      round++;
-    }
+         // Update progress tracking after tool execution
+         this.updateTaskProgress();
 
-    return {
-      response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
-      fullMessages: currentMessages,
-      rounds: maxRounds,
-          status: "maxRounds"
-    };
-  }
+         // Prepare for next round
+         const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+         currentResponse = await client.chat.complete({ model, messages: apiMessages });
+
+         if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
+         round++;
+         continue;
+       }
+
+       // Termination condition 1: No tool calls - task completed
+       const toolCalls = assistantMsg.toolCalls;
+       if (!toolCalls || toolCalls.length === 0) {
+         if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No tool calls, task finished`);
+         return {
+           response: assistantMsg.content,
+           fullMessages: currentMessages,
+           rounds: round,
+           status: "success"
+         };
+       }
+
+       // Termination: Hard Stop on Context
+       if (!this._hasRoomForNextRound(currentMessages)) {
+         return {
+           response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
+           fullMessages: currentMessages,
+           rounds: round,
+           status: "contextOverflow"
+         };
+       }
+
+       // Termination condition 2: Max rounds reached
+       if (round >= maxRounds) {
+         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Maximum rounds reached. Task may require manual intervention.`);
+         return {
+           response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
+           fullMessages: currentMessages,
+           rounds: round,
+           status: "maxRounds"
+         };
+       }
+
+       // Execute tools with circuit breaker
+       const runResult = await this._runToolCalls(toolCalls, 'recursive');
+       if (!runResult) {
+         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
+         return {
+           response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
+           fullMessages: currentMessages,
+           rounds: round,
+           status: "blocked"
+         };
+       }
+
+       const { toolResults, allCallsSuccessful } = runResult;
+       currentMessages.push(...toolResults); // Critical Fix: Update history with tool results
+       loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+
+       // Post-execution loop check
+       if (loopDetector.detectToolCallLoop(toolCalls)) {
+         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
+         return {
+           response: "Loop detected: Agent stopped to prevent infinite recursion.",
+           fullMessages: currentMessages,
+           rounds: round,
+           status: "loopDetected"
+         };
+       }
+
+       // Update progress tracking after tool execution
+       this.updateTaskProgress();
+
+       // Prepare for next round
+       const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+       currentResponse = await client.chat.complete({ model, messages: apiMessages });
+
+       if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
+       round++;
+     }
+
+     return {
+       response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
+       fullMessages: currentMessages,
+       rounds: maxRounds,
+           status: "maxRounds"
+     };
+   }
 
   /**
    * Update task progress based on Agent's state and check for completion.

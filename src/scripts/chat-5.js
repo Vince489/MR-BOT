@@ -9,7 +9,7 @@ import { dbsearchTool } from '../tools/dbsearchTool.js';
 
 dotenv.config();
 
-// node src/scripts/chat-5 
+// node src/scripts/chat-5
 
 const SYSTEM_PROMPT = fs.readFileSync('./src/docs/persona-4.md', 'utf8');
 
@@ -237,8 +237,8 @@ function printHelp() {
   console.log('   ✅ Atomic progress state merging');
   console.log('   ✅ Chat history search tool (semantic search across conversations)');
   console.log('\n💡 IMPORTANT: This interface enforces mandatory thought process.');
-  console.log('   The AI will ALWAYS use the thought tool before responding.');
-  console.log('   This ensures systematic, well-reasoned responses.\n');
+  console.log('   The AI is now constrained by a JSON schema to record its thoughts before responding.');
+  console.log('   This ensures systematic, well-reasoned responses and guarantees thoughts are saved to the database.\n');
   console.log('🔍 CHAT HISTORY SEARCH:');
   console.log('   The agent has access to a powerful search tool that can:');
   console.log('   • Find messages by keywords or topics');

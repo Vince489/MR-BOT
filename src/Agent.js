@@ -246,27 +246,84 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
    * @param {string} userInput - User input message
    * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
    */
-  async execute(history, userInput) {
-    const messages = [
-      { role: "system", content: this.systemPrompt },
-      ...(history || []),
-      { role: "user", content: userInput }
-    ];
+   async execute(history, userInput) {
+     const messages = [
+       { role: "system", content: this.systemPrompt },
+       ...(history || []),
+       { role: "user", content: userInput }
+     ];
 
-    const response = await this.client.chat.complete({
-      model: this.model,
-      messages: messages,
-      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
-    });
+     // Define the JSON schema to enforce structured thought before reply
+     const responseFormat = {
+       type: "json_object",
+       schema: {
+         type: "object",
+         properties: {
+           thought_data: {
+             type: "object",
+             properties: {
+               step: { type: "string", enum: ["Pre-tool reasoning", "Final decision", "Plan adjustment"] },
+               hypothesis: { type: "string" },
+               plan: { type: "array", items: { type: "string" } },
+               uncertainties: { type: "array", items: { type: "string" } },
+               alternativesConsidered: { type: "array", items: { type: "string" } }
+             },
+             required: ["step", "hypothesis", "plan"]
+           },
+           final_reply: { type: "string" },
+           requested_tools: {
+             type: "array",
+             items: {
+               type: "object",
+               properties: {
+                 tool: { type: "string" },
+                 arguments: { type: "object" }
+               },
+               required: ["tool", "arguments"]
+             }
+           }
+         },
+         required: ["thought_data", "final_reply"],
+         additionalProperties: false
+       }
+     };
 
-    // 🚀 DEVELOPMENT LOGGING: Show current progress state before processing response
-    if (this.debug && this.progressState.size > 0) {
-      const currentProgress = this._mapToProgressString(this.progressState);
-      console.log('📊 [PROGRESS] Current state before response processing:', currentProgress);
-    }
+     const response = await this.client.chat.complete({
+       model: this.model,
+       messages: messages,
+       ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
+       responseFormat: responseFormat
+     });
 
-    return this.responseProcessor.processResponse(response, messages);
-  }
+     // 🚀 DEVELOPMENT LOGGING: Show current progress state before processing response
+     if (this.debug && this.progressState.size > 0) {
+       const currentProgress = this._mapToProgressString(this.progressState);
+       console.log('📊 [PROGRESS] Current state before response processing:', currentProgress);
+     }
+
+     // Parse the structured response and save thoughts to MongoDB
+     const rawContent = response.choices[0].message.content;
+     const parsed = JSON.parse(rawContent);
+
+     // Save thought data to MongoDB
+     if (parsed.thought_data) {
+       try {
+         const Thought = (await import('../models/Thought.js')).default;
+         const newThought = new Thought({
+           session: this.sessionId,
+           userInput: userInput,
+           ...parsed.thought_data,
+           agentId: "mistral-large-enforced"
+         });
+         await newThought.save();
+         console.log(`💾 Thought persisted to DB: ${newThought._id}`);
+       } catch (err) {
+         console.error("Failed to save thought:", err);
+       }
+     }
+
+     return this.responseProcessor.processResponse(response, messages);
+   }
 
   /**
    * Execute a streaming request with tool management
@@ -275,7 +332,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
    * @param {Function} [onChunk] - Optional callback for each text token
    * @returns {Promise<{response: string, fullMessages: Array}>} - Agent's response and full conversation
    */
-  async executeStream(history, userInput, onChunk) {
+   async executeStream(history, userInput, onChunk) {
     // Initialize enhanced components if not already done
     if (!this.streamingProcessor) {
       this.streamingProcessor = new StreamingResponseProcessor(this);
@@ -292,13 +349,77 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       { role: "user", content: userInput }
     ];
 
+    // Define the JSON schema to enforce structured thought before reply
+    const responseFormat = {
+      type: "json_object",
+      schema: {
+        type: "object",
+        properties: {
+          thought_data: {
+            type: "object",
+            properties: {
+              step: { type: "string", enum: ["Pre-tool reasoning", "Final decision", "Plan adjustment"] },
+              hypothesis: { type: "string" },
+              plan: { type: "array", items: { type: "string" } },
+              uncertainties: { type: "array", items: { type: "string" } },
+              alternativesConsidered: { type: "array", items: { type: "string" } }
+            },
+            required: ["step", "hypothesis", "plan"]
+          },
+          final_reply: { type: "string" },
+          requested_tools: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                tool: { type: "string" },
+                arguments: { type: "object" }
+              },
+              required: ["tool", "arguments"]
+            }
+          }
+        },
+        required: ["thought_data", "final_reply"],
+        additionalProperties: false
+      }
+    };
+
     const stream = await this.client.chat.stream({
       model: this.model,
       messages: messages,
-      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() })
+      ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
+      responseFormat: responseFormat
     });
 
-    return this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
+    // Process the stream and handle the structured response
+    const result = await this.streamingProcessor.processStreamResponse(stream, messages, onChunk);
+
+    // Parse the structured response and save thoughts to MongoDB
+    const rawContent = result.response;
+    try {
+      const parsed = JSON.parse(rawContent);
+
+      // Save thought data to MongoDB
+      if (parsed.thought_data) {
+        try {
+          const Thought = (await import('../models/Thought.js')).default;
+          const newThought = new Thought({
+            session: this.sessionId,
+            userInput: userInput,
+            ...parsed.thought_data,
+            agentId: "mistral-large-enforced"
+          });
+          await newThought.save();
+          console.log(`💾 Thought persisted to DB: ${newThought._id}`);
+        } catch (err) {
+          console.error("Failed to save thought:", err);
+        }
+      }
+    } catch (parseError) {
+      console.error("Failed to parse structured response:", parseError);
+    }
+
+    return result;
   }
 
 

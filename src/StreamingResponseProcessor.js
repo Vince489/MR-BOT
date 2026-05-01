@@ -164,20 +164,131 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       currentMessages.push(assistantMessage);
 
+      // Check if the response is a structured JSON
+      let parsedContent;
+      try {
+        parsedContent = JSON.parse(assistantMessage.content);
+      } catch (e) {
+        // Not a JSON response, proceed as usual
+      }
+
+      // If it's a structured response, handle it
+      if (parsedContent) {
+        if (this.debug) console.log(`📊 [STREAM LOOP] Round ${round} - Structured response detected`);
+
+        // Extract the final reply and requested tools
+        const finalReply = parsedContent.final_reply;
+        const requestedTools = parsedContent.requested_tools || [];
+
+        // If there are no requested tools, return the final reply
+        if (requestedTools.length === 0) {
+          if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No requested tools, task finished`);
+
+          // Memory integration: Commit final insights
+          if (this.memoryMode) {
+            await this.afterDecision({ content: finalReply }, { round, type: 'completion' });
+          }
+
+          return {
+            response: finalReply,
+            fullMessages: currentMessages,
+            rounds: round,
+            status: "success"
+          };
+        }
+
+        // Convert requested tools to tool calls format
+        const toolCalls = requestedTools.map((tool, index) => ({
+          id: `call_${Date.now()}_${index}`,
+          type: "function",
+          function: {
+            name: tool.tool,
+            arguments: JSON.stringify(tool.arguments)
+          }
+        }));
+
+        // Execute Tools with unified ToolExecutionManager
+        const toolExecutionManager = this.agent.toolExecutionManager;
+        if (!toolExecutionManager) {
+          throw new Error("ToolExecutionManager not initialized");
+        }
+
+        const toolActions = [];
+        const runResult = await toolExecutionManager.executeToolCalls(
+          toolCalls,
+          toolActions,
+          this.agent.userInput || "",
+          true, // parallel execution
+          null // no abort signal
+        );
+
+        if (!runResult) {
+          if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Circuit breaker protection activated`);
+
+          // Memory integration: Commit circuit breaker insight
+          if (this.memoryMode) {
+            await this.afterDecision({ content: "Circuit breaker protection activated" }, { round, type: 'circuitBreaker' });
+          }
+
+          return {
+            response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
+            fullMessages: currentMessages,
+            rounds: round,
+            status: "blocked"
+          };
+        }
+
+        const { toolResults, allCallsSuccessful } = runResult;
+        currentMessages.push(...toolResults);
+        this.agent.loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+
+        // Post-execution loop check
+        if (this.agent.loopDetector.detectToolCallLoop(toolCalls)) {
+          if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
+
+          // Memory integration: Commit loop detection insight
+          if (this.memoryMode) {
+            await this.afterDecision({ content: "Loop detected: Agent stopped to prevent infinite recursion" }, { round, type: 'loopDetected' });
+          }
+
+          return {
+            response: "Loop detected: Agent stopped to prevent infinite recursion.",
+            fullMessages: currentMessages,
+            rounds: round,
+            status: "loopDetected"
+          };
+        }
+
+        // Update progress tracking after tool execution
+        this.updateTaskProgress();
+
+        // Prepare for next round - sanitize messages for API compliance
+        const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+        currentStream = await this.agent.client.chat.stream({
+          model: this.agent.model,
+          messages: apiMessages,
+          ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
+        });
+
+        if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
+        round++;
+        continue;
+      }
+
       // Termination 1: Success - No tool calls
       if (!assistantMessage.toolCalls || assistantMessage.toolCalls.length === 0) {
         if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No tool calls, task finished`);
-        
+
         // Memory integration: Commit final insights
         if (this.memoryMode) {
           await this.afterDecision({ content: assistantMessage.content }, { round, type: 'completion' });
         }
-        
-        return { 
-          response: assistantMessage.content, 
-          fullMessages: currentMessages, 
-          rounds: round, 
-          status: "success" 
+
+        return {
+          response: assistantMessage.content,
+          fullMessages: currentMessages,
+          rounds: round,
+          status: "success"
         };
       }
 
