@@ -99,6 +99,35 @@ this.systemPrompt = (config.tools && config.tools.length > 0)
     });
     this.responseProcessor = new ResponseProcessor(this);
 
+    // Strict JSON schema reused by execute(), executeStream(), and every continuation round
+    this.responseFormat = {
+      type: "json_schema",
+      jsonSchema: {
+        name: "agent_response",
+        strict: true,
+        schemaDefinition: {
+          type: "object",
+          properties: {
+            final_reply: { type: "string" },
+            requested_tools: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tool: { type: "string" },
+                  arguments: { type: "object" }
+                },
+                required: ["tool", "arguments"],
+                additionalProperties: false
+              }
+            }
+          },
+          required: ["final_reply", "requested_tools"],
+          additionalProperties: false
+        }
+      }
+    };
+
     // Set up event listeners for circuit breaker events
     this._setupCircuitBreakerEvents();
 
@@ -273,36 +302,15 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
        { role: "user", content: userInput }
      ];
 
-    // Define the JSON schema to enforce structured response
-    const responseFormat = {
-      type: "json_object",
-      schema: {
-        type: "object",
-        properties: {
-          action: { type: "string" },
-          data: { type: "object" },
-          requested_tools: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                tool: { type: "string" },
-                arguments: { type: "object" }
-              },
-              required: ["tool", "arguments"]
-            }
-          }
-        },
-        required: ["requested_tools"],
-        additionalProperties: false
-      }
-    };
-
+     // Round 1: force recordThought via toolChoice; defer responseFormat until round 2+
+     const forceRecordThought = !!this.handlers?.recordThought;
      const response = await this.client.chat.complete({
        model: this.model,
        messages: messages,
        ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
-       responseFormat: responseFormat
+       ...(forceRecordThought
+         ? { toolChoice: { type: "function", function: { name: "recordThought" } } }
+         : { responseFormat: this.responseFormat })
      });
 
      // 🚀 DEVELOPMENT LOGGING: Show current progress state before processing response
@@ -310,10 +318,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
        const currentProgress = this._mapToProgressString(this.progressState);
        console.log('📊 [PROGRESS] Current state before response processing:', currentProgress);
      }
-
-     // Parse the structured response
-     const rawContent = response.choices[0].message.content;
-     const parsed = JSON.parse(rawContent);
 
      return this.responseProcessor.processResponse(response, messages);
    }
@@ -342,36 +346,15 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       { role: "user", content: userInput }
     ];
 
-    // Define the JSON schema to enforce structured response
-    const responseFormat = {
-      type: "json_object",
-      schema: {
-        type: "object",
-        properties: {
-          action: { type: "string" },
-          data: { type: "object" },
-          requested_tools: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                tool: { type: "string" },
-                arguments: { type: "object" }
-              },
-              required: ["tool", "arguments"]
-            }
-          }
-        },
-        required: ["requested_tools"],
-        additionalProperties: false
-      }
-    };
-
+    // Round 1: force recordThought via toolChoice; defer responseFormat until round 2+
+    const forceRecordThought = !!this.handlers?.recordThought;
     const stream = await this.client.chat.stream({
       model: this.model,
       messages: messages,
       ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
-      responseFormat: responseFormat
+      ...(forceRecordThought
+        ? { toolChoice: { type: "function", function: { name: "recordThought" } } }
+        : { responseFormat: this.responseFormat })
     });
 
     // Process the stream and handle the structured response

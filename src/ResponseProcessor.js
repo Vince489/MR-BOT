@@ -381,22 +381,7 @@ export class ResponseProcessor {
         currentResponse = await client.chat.complete({
           model,
           messages: apiMessages,
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "minimal_agent_response_schema",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    action: { type: "string" },
-                    data: { type: "object" }
-                  },
-                  required: ["action"],
-                  additionalProperties: false
-                }
-              }
-            }
+          ...(this.agent.responseFormat && { responseFormat: this.agent.responseFormat })
         });
 
          if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
@@ -469,7 +454,11 @@ export class ResponseProcessor {
 
        // Prepare for next round
        const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-       currentResponse = await client.chat.complete({ model, messages: apiMessages });
+       currentResponse = await client.chat.complete({
+         model,
+         messages: apiMessages,
+         ...(this.agent.responseFormat && { responseFormat: this.agent.responseFormat })
+       });
 
        if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
        round++;
@@ -624,23 +613,8 @@ export class ResponseProcessor {
       const nextStream = await client.chat.stream({
         model,
         messages: apiMessages,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "minimal_agent_response_schema",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                action: { type: "string" },
-                data: { type: "object" }
-              },
-              required: ["action"],
-              additionalProperties: false
-            }
-          }
-        },
-        ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
+        ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() }),
+        ...(this.agent.responseFormat && { responseFormat: this.agent.responseFormat })
       });
       
       // Continue with streaming processing

@@ -108,6 +108,3 @@ The system's design ensures that:
 
 This architecture makes MR-BOT particularly suitable for applications requiring reliable, long-running reasoning processes with persistent memory and progress tracking.
 
-•	"Persistent state awareness" – the storage system saves conversation history + progress, which is useful, but that's not awareness. The LLM doesn't know it has persistent state; the system just reinjects prior context. Important distinction.
-•	"Self-healing" – circuit breaker prevents repeated failures but doesn't fix the underlying error. That's standard fault tolerance, not healing.
-•	"Reasoning engine" label – MR-BOT is a wrapper + orchestration layer around an LLM (Mistral). The reasoning quality ultimately depends on the underlying model's CoT capability. The framework enforces structure but doesn't change the LLM's native limits (hallucination, fragile self-correction).

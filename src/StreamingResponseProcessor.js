@@ -275,7 +275,8 @@ export class StreamingResponseProcessor extends EventEmitter {
         currentStream = await this.agent.client.chat.stream({
           model: this.agent.model,
           messages: apiMessages,
-          ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
+          ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() }),
+          ...(this.agent.responseFormat && { responseFormat: this.agent.responseFormat })
         });
 
         if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
@@ -394,7 +395,8 @@ export class StreamingResponseProcessor extends EventEmitter {
       currentStream = await client.chat.stream({
         model,
         messages: apiMessages,
-        ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
+        ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() }),
+        ...(this.agent.responseFormat && { responseFormat: this.agent.responseFormat })
       });
 
       if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
