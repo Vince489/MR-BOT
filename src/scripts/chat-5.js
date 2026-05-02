@@ -192,8 +192,16 @@ async function main() {
       }
 
       // CRITICAL: Keep our local 'messages' variable clean (no system prompt)
-      // This prevents the system prompt from doubling up every turn
-      messages = result.fullMessages.slice(1);
+      // This prevents the system prompt from doubling up every turn.
+      // Also strip tool-call / tool-result messages (mirrors the startup filter)
+      // so prior taskProgress checklists don't leak into the next turn's context.
+      messages = result.fullMessages.slice(1).filter(msg => {
+        if (msg.role === 'user') return true;
+        if (msg.role === 'assistant') {
+          return !msg.toolCalls || msg.toolCalls.length === 0;
+        }
+        return false;
+      });
 
       // Sync the index tracker
       lastSavedIndex = messages.length;
