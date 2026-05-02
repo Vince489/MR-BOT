@@ -381,23 +381,22 @@ export class ResponseProcessor {
         currentResponse = await client.chat.complete({
           model,
           messages: apiMessages,
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "minimal_agent_response_schema",
-              strict: true,
-              schema: {
-                type: "object",
-                properties: {
-                  thought: { type: "string" },
-                  action: { type: "string" },
-                  data: { type: "object" }
-                },
-                required: ["thought", "action"],
-                additionalProperties: false
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "minimal_agent_response_schema",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    action: { type: "string" },
+                    data: { type: "object" }
+                  },
+                  required: ["action"],
+                  additionalProperties: false
+                }
               }
             }
-          }
         });
 
          if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
@@ -633,11 +632,10 @@ export class ResponseProcessor {
             schema: {
               type: "object",
               properties: {
-                thought: { type: "string" },
                 action: { type: "string" },
                 data: { type: "object" }
               },
-              required: ["thought", "action"],
+              required: ["action"],
               additionalProperties: false
             }
           }

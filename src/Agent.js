@@ -119,14 +119,29 @@ this.systemPrompt = (config.tools && config.tools.length > 0)
     }
   }
 
-  /**
-   * Automatically inject Progress Tracking Protocol instructions into system prompt
-   * @param {string} systemPrompt - Original system prompt
-   * @returns {string} - System prompt with progress tracking instructions
-   * @private
-   */
-  _injectProgressTrackingProtocol(systemPrompt) {
-    const progressProtocol = `
+   /**
+    * Automatically inject Progress Tracking Protocol instructions into system prompt
+    * @param {string} systemPrompt - Original system prompt
+    * @returns {string} - System prompt with progress tracking instructions
+    * @private
+    */
+   _injectProgressTrackingProtocol(systemPrompt) {
+     const progressProtocol = `
+
+## Thought Recording Protocol
+
+**CRITICAL INSTRUCTION:** Internal reasoning fields have been removed from your output schema.
+To process any request, you MUST first use the \`recordThought\` tool to commit your reasoning to the system logs.
+You cannot provide a response until your thoughts have been recorded via the tool.
+
+**Instructions:**
+1. **Mandatory Thought Recording**: Before generating any response, you MUST use the \`recordThought\` tool to externalize your reasoning process.
+2. **Structured Reasoning**: The \`recordThought\` tool requires structured input including:
+   - Current reasoning step
+   - Hypothesis about the user's goal
+   - Plan of action with tools to be used
+   - Any uncertainties or alternatives considered
+3. **Progress Tracking**: Use the \`taskProgress\` parameter in ALL tool calls to track your progress.
 
 ## Progress Tracking Protocol
 
@@ -148,19 +163,21 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 **Example:**
 \`\`\`
 {
-  "tool": "searchWeb",
+  "tool": "recordThought",
   "arguments": {
-    "query": "latest AI developments",
-    "taskProgress": "- [ ] Research AI developments\\n- [ ] Analyze findings\\n- [x] Define research scope"
+    "step": "Pre-tool reasoning",
+    "hypothesis": "User wants to research AI developments",
+    "plan": ["Search for latest AI developments", "Analyze findings"],
+    "uncertainties": ["What timeframe is relevant?"]
   }
 }
 \`\`\`
 
-**Failure to follow this protocol will result in lost progress state and task failure.**
+**Failure to follow these protocols will result in lost progress state and task failure.**
 `;
 
-    return systemPrompt + progressProtocol;
-  }
+     return systemPrompt + progressProtocol;
+   }
 
   /**
    * Set up event listeners for circuit breaker events
@@ -255,24 +272,14 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
        { role: "user", content: userInput }
      ];
 
-     // Define the JSON schema to enforce structured thought before reply
+     // Define the JSON schema to enforce structured response
      const responseFormat = {
        type: "json_object",
        schema: {
          type: "object",
          properties: {
-           thought_data: {
-             type: "object",
-             properties: {
-               step: { type: "string", enum: ["Pre-tool reasoning", "Final decision", "Plan adjustment"] },
-               hypothesis: { type: "string" },
-               plan: { type: "array", items: { type: "string" } },
-               uncertainties: { type: "array", items: { type: "string" } },
-               alternativesConsidered: { type: "array", items: { type: "string" } }
-             },
-             required: ["step", "hypothesis", "plan"]
-           },
-           final_reply: { type: "string" },
+           action: { type: "string" },
+           data: { type: "object" },
            requested_tools: {
              type: "array",
              items: {
@@ -285,7 +292,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
              }
            }
          },
-         required: ["thought_data", "final_reply"],
+         required: ["action"],
          additionalProperties: false
        }
      };
@@ -303,32 +310,9 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
        console.log('📊 [PROGRESS] Current state before response processing:', currentProgress);
      }
 
-     // Parse the structured response and save thoughts to MongoDB
+     // Parse the structured response
      const rawContent = response.choices[0].message.content;
      const parsed = JSON.parse(rawContent);
-
-    // Save thought data to MongoDB
-    if (parsed.thought_data) {
-      try {
-        // Find the session by sessionId
-        const session = await Session.findOne({ sessionId: this.sessionId });
-
-        if (session) {
-          const newThought = new Thought({
-            session: session._id, // Use the ObjectId of the session
-            userInput: userInput,
-            ...parsed.thought_data,
-            agentId: "mistral-large-enforced"
-          });
-          await newThought.save();
-          console.log(`💾 Thought persisted to DB: ${newThought._id}`);
-        } else {
-          console.warn(`⚠️ Could not save thought: Session ${this.sessionId} not found`);
-        }
-      } catch (err) {
-        console.error("Failed to save thought:", err);
-      }
-    }
 
      return this.responseProcessor.processResponse(response, messages);
    }
@@ -357,24 +341,14 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       { role: "user", content: userInput }
     ];
 
-    // Define the JSON schema to enforce structured thought before reply
+    // Define the JSON schema to enforce structured response
     const responseFormat = {
       type: "json_object",
       schema: {
         type: "object",
         properties: {
-          thought_data: {
-            type: "object",
-            properties: {
-              step: { type: "string", enum: ["Pre-tool reasoning", "Final decision", "Plan adjustment"] },
-              hypothesis: { type: "string" },
-              plan: { type: "array", items: { type: "string" } },
-              uncertainties: { type: "array", items: { type: "string" } },
-              alternativesConsidered: { type: "array", items: { type: "string" } }
-            },
-            required: ["step", "hypothesis", "plan"]
-          },
-          final_reply: { type: "string" },
+          action: { type: "string" },
+          data: { type: "object" },
           requested_tools: {
             type: "array",
             items: {
@@ -387,7 +361,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
             }
           }
         },
-        required: ["thought_data", "final_reply"],
+        required: ["action"],
         additionalProperties: false
       }
     };
@@ -412,41 +386,6 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     if (!result || !result.response) {
       console.error("Invalid result from processStreamResponse:", result);
       return { response: "An error occurred while processing the response." };
-    }
-
-    // Parse the structured response and save thoughts to MongoDB
-    const rawContent = result.response;
-    let parsed = null;
-    try {
-      // Only attempt to parse as JSON if the content looks like JSON
-      if (rawContent.trim().startsWith('{') && rawContent.trim().endsWith('}')) {
-        parsed = JSON.parse(rawContent);
-      }
-    } catch (parseError) {
-      console.error("Failed to parse structured response:", parseError);
-    }
-
-    // Save thought data to MongoDB
-    if (parsed?.thought_data) {
-      try {
-        // Find the session by sessionId
-        const session = await Session.findOne({ sessionId: this.sessionId });
-
-        if (session) {
-          const newThought = new Thought({
-            session: session._id, // Use the ObjectId of the session
-            userInput: userInput,
-            ...parsed.thought_data,
-            agentId: "mistral-large-enforced"
-          });
-          await newThought.save();
-          console.log(`💾 Thought persisted to DB: ${newThought._id}`);
-        } else {
-          console.warn(`⚠️ Could not save thought: Session ${this.sessionId} not found`);
-        }
-      } catch (err) {
-        console.error("Failed to save thought:", err);
-      }
     }
 
     return result;
