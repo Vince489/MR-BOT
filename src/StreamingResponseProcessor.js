@@ -46,6 +46,73 @@ export class StreamingResponseProcessor extends EventEmitter {
     };
   }
 
+  // Streaming extractor for the value of "final_reply" inside structured JSON
+  // content. Emits unescaped characters to `emit` as they arrive across chunk
+  // boundaries; stops at the closing quote. Silently ignores everything outside
+  // the final_reply string (envelope braces, requested_tools, etc.).
+  _makeFinalReplyStreamer(emit) {
+    const KEY_PATTERN = /"final_reply"\s*:\s*"/;
+    let state = 'SEEKING';
+    let seekBuf = '';
+    let escape = false;
+    let collectingUnicode = false;
+    let unicodeBuf = '';
+
+    return function feed(chunk) {
+      if (state === 'DONE' || !chunk) return;
+      let i = 0;
+
+      if (state === 'SEEKING') {
+        seekBuf += chunk;
+        const match = KEY_PATTERN.exec(seekBuf);
+        if (!match) {
+          if (seekBuf.length > 64) seekBuf = seekBuf.slice(-64);
+          return;
+        }
+        state = 'IN_VALUE';
+        const consumed = match.index + match[0].length;
+        const beforeChunkLen = seekBuf.length - chunk.length;
+        i = Math.max(0, consumed - beforeChunkLen);
+        seekBuf = '';
+      }
+
+      let out = '';
+      while (i < chunk.length) {
+        const ch = chunk[i++];
+        if (collectingUnicode) {
+          unicodeBuf += ch;
+          if (unicodeBuf.length === 4) {
+            out += String.fromCharCode(parseInt(unicodeBuf, 16));
+            unicodeBuf = '';
+            collectingUnicode = false;
+          }
+          continue;
+        }
+        if (escape) {
+          escape = false;
+          switch (ch) {
+            case '"':  out += '"';  break;
+            case '\\': out += '\\'; break;
+            case '/':  out += '/';  break;
+            case 'n':  out += '\n'; break;
+            case 'r':  out += '\r'; break;
+            case 't':  out += '\t'; break;
+            case 'b':  out += '\b'; break;
+            case 'f':  out += '\f'; break;
+            case 'u':  collectingUnicode = true; unicodeBuf = ''; break;
+            default:   out += ch;
+          }
+          continue;
+        }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"')  { state = 'DONE'; break; }
+        out += ch;
+      }
+
+      if (out) emit(out);
+    };
+  }
+
   _sanitizeMessagesForApi(messages) {
     return (messages || []).map((msg) => {
       if (!msg || typeof msg !== 'object') return null;
@@ -122,6 +189,14 @@ export class StreamingResponseProcessor extends EventEmitter {
       let assistantMessage = { role: "assistant", content: "", toolCalls: [] };
       const toolCallAccumulator = new Map();
 
+      // When responseFormat is active the model's content is structured JSON,
+      // so route chunks through an extractor that surfaces only the unescaped
+      // value of "final_reply" to the caller.
+      const useExtractor = !!this.agent.responseFormat;
+      const feedFinalReply = (useExtractor && onChunk)
+        ? this._makeFinalReplyStreamer(onChunk)
+        : null;
+
       // Consume the stream
       for await (const chunk of currentStream) {
         const delta = chunk.data?.choices?.[0]?.delta || chunk.choices?.[0]?.delta;
@@ -129,7 +204,8 @@ export class StreamingResponseProcessor extends EventEmitter {
 
         if (delta.content) {
           assistantMessage.content += delta.content;
-          if (onChunk) onChunk(delta.content);
+          if (feedFinalReply) feedFinalReply(delta.content);
+          else if (onChunk) onChunk(delta.content);
         }
 
         const streamingToolCalls = delta.toolCalls;
