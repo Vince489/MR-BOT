@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Minimal Agent Response Schema",
+  "description": "Minimal schema for LLM agent responses, enforcing required fields and preventing hallucinations via constrained decoding.",
+  "type": "object",
+  "properties": {
+    "thought": {
+      "type": "string",
+      "description": "Internal reasoning or analysis for the current step."
+    },
+    "action": {
+      "type": "string",
+      "description": "Next action to execute (e.g., search, respond)."
+    },
+    "data": {
+      "type": "object",
+      "description": "Optional payload for the action (e.g., parameters, results).",
+      "additionalProperties": true
+    }
+  },
+  "required": ["thought", "action"],
+  "additionalProperties": false
+}

@@ -150,8 +150,12 @@ export class ToolExecutionManager extends EventEmitter {
         this._processTaskProgress(taskProgress, name, validatedArgs);
       }
 
+      // With constrained decoding, tool names are guaranteed to be valid per the schema
       const handler = this.handlers[name];
-      if (!handler) throw new Error(`Handler for "${name}" not found`);
+      if (!handler) {
+        console.error(`⚠️ Critical: Handler for "${name}" not found. This should never happen with schema enforcement.`);
+        throw new Error(`Handler for "${name}" not found`);
+      }
 
       // Memory integration: Record structured thought before execution
       if (this.memoryMode) {

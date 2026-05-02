@@ -376,9 +376,29 @@ export class ResponseProcessor {
          // Update progress tracking after tool execution
          this.updateTaskProgress();
 
-         // Prepare for next round
-         const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-         currentResponse = await client.chat.complete({ model, messages: apiMessages });
+        // Prepare for next round
+        const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+        currentResponse = await client.chat.complete({
+          model,
+          messages: apiMessages,
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "minimal_agent_response_schema",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  thought: { type: "string" },
+                  action: { type: "string" },
+                  data: { type: "object" }
+                },
+                required: ["thought", "action"],
+                additionalProperties: false
+              }
+            }
+          }
+        });
 
          if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
          round++;
@@ -602,9 +622,26 @@ export class ResponseProcessor {
       });
 
 
-      const nextStream = await client.chat.stream({ 
-        model, 
+      const nextStream = await client.chat.stream({
+        model,
         messages: apiMessages,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "minimal_agent_response_schema",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                thought: { type: "string" },
+                action: { type: "string" },
+                data: { type: "object" }
+              },
+              required: ["thought", "action"],
+              additionalProperties: false
+            }
+          }
+        },
         ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
       });
       
