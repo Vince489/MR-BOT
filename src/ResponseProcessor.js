@@ -363,7 +363,7 @@ export class ResponseProcessor {
          loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
 
          // Post-execution loop check
-         if (loopDetector.detectToolCallLoop(toolCalls)) {
+         if (loopDetector.detectToolCallLoop(toolCalls).detected) {
            if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
            return {
              response: "Loop detected: Agent stopped to prevent infinite recursion.",
@@ -454,7 +454,7 @@ export class ResponseProcessor {
        loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
 
        // Post-execution loop check
-       if (loopDetector.detectToolCallLoop(toolCalls)) {
+       if (loopDetector.detectToolCallLoop(toolCalls).detected) {
          if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
          return {
            response: "Loop detected: Agent stopped to prevent infinite recursion.",
@@ -577,7 +577,7 @@ export class ResponseProcessor {
       }
 
       // Termination 3: Loop Detection
-      if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
+      if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls).detected) {
         return { response: "Loop detected.", fullMessages: currentMessages, rounds: round, status: "loopDetected" };
       }
 

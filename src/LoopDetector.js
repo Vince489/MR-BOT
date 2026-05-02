@@ -57,7 +57,7 @@ export class LoopDetector {
     // Advanced A->B->A->B pattern detection
     if (this.enablePatternDetection) {
       const complexLoop = this._detectComplexLoop(toolCalls);
-      if (complexLoop) {
+      if (complexLoop && complexLoop.detected) {
         return { detected: true, pattern: complexLoop.pattern || toolCalls[0].function.name };
       }
     }

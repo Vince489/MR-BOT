@@ -1,0 +1,170 @@
+[{
+  "_id": {
+    "$oid": "69f664dbf992a49da23b868d"
+  },
+  "session": {
+    "$oid": "69f664dbf992a49da23b868a"
+  },
+  "role": "user",
+  "content": "hello",
+  "embedding": [],
+  "toolCalls": [],
+  "metadata": {
+    "tokens": 5,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-05-02T20:55:55.980Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-02T20:55:55.980Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69f664dbf992a49da23b868e"
+  },
+  "session": {
+    "$oid": "69f664dbf992a49da23b868a"
+  },
+  "role": "assistant",
+  "content": "",
+  "embedding": [],
+  "toolCalls": [
+    {
+      "id": "j8iu8fscR",
+      "type": "function",
+      "function": {
+        "name": "recordThought",
+        "arguments": "{\"step\": \"Pre-tool reasoning\", \"hypothesis\": \"User is initiating a conversation and may need assistance with a task.\", \"plan\": [\"Respond to greeting\", \"Ask how I can assist\"], \"uncertainties\": [\"The specific task or information the user needs\"], \"taskProgress\": \"- [ ] Respond to greeting\\n- [ ] Ask how I can assist\"}"
+      },
+      "_id": {
+        "$oid": "69f664dbf992a49da23b868f"
+      }
+    }
+  ],
+  "metadata": {
+    "tokens": 116,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-05-02T20:55:55.981Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-02T20:55:55.981Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69f664dbf992a49da23b8690"
+  },
+  "session": {
+    "$oid": "69f664dbf992a49da23b868a"
+  },
+  "role": "tool",
+  "content": "{\"status\":\"success\",\"message\":\"Thought recorded successfully\",\"recorded_at\":\"2026-05-02T20:55:55.955Z\",\"summary\":{\"step\":\"Pre-tool reasoning\",\"plan_steps\":2,\"has_uncertainties\":true,\"storage\":{\"saved\":true,\"session\":\"69b1229049c08b5a9b43e123\",\"error\":null}},\"thought_id\":\"saved_to_mongodb\"}",
+  "embedding": [],
+  "toolCalls": [],
+  "toolCallId": "j8iu8fscR",
+  "metadata": {
+    "tokens": 92,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-05-02T20:55:55.981Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-02T20:55:55.981Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69f664fdf992a49da23b8698"
+  },
+  "session": {
+    "$oid": "69f664dbf992a49da23b868a"
+  },
+  "role": "user",
+  "content": "tell me about yourself",
+  "embedding": [],
+  "toolCalls": [],
+  "metadata": {
+    "tokens": 8,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-05-02T20:56:29.036Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-02T20:56:29.036Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69f664fdf992a49da23b8699"
+  },
+  "session": {
+    "$oid": "69f664dbf992a49da23b868a"
+  },
+  "role": "assistant",
+  "content": "",
+  "embedding": [],
+  "toolCalls": [
+    {
+      "id": "xytad2k7Z",
+      "type": "function",
+      "function": {
+        "name": "recordThought",
+        "arguments": "{\"step\": \"Pre-tool reasoning\", \"hypothesis\": \"User wants to know about my capabilities and role.\", \"plan\": [\"Provide a brief introduction about myself\", \"Explain my capabilities and limitations\"], \"uncertainties\": [\"The specific aspects the user is interested in\"], \"taskProgress\": \"- [x] Respond to greeting\\n- [x] Ask how I can assist\\n- [ ] Provide a brief introduction about myself\\n- [ ] Explain my capabilities and limitations\"}"
+      },
+      "_id": {
+        "$oid": "69f664fdf992a49da23b869a"
+      }
+    }
+  ],
+  "metadata": {
+    "tokens": 140,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-05-02T20:56:29.037Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-02T20:56:29.037Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "69f664fdf992a49da23b869b"
+  },
+  "session": {
+    "$oid": "69f664dbf992a49da23b868a"
+  },
+  "role": "tool",
+  "content": "{\"status\":\"success\",\"message\":\"Thought recorded successfully\",\"recorded_at\":\"2026-05-02T20:56:29.015Z\",\"summary\":{\"step\":\"Pre-tool reasoning\",\"plan_steps\":2,\"has_uncertainties\":true,\"storage\":{\"saved\":true,\"session\":\"69b1229049c08b5a9b43e123\",\"error\":null}},\"thought_id\":\"saved_to_mongodb\"}",
+  "embedding": [],
+  "toolCalls": [],
+  "toolCallId": "xytad2k7Z",
+  "metadata": {
+    "tokens": 92,
+    "model": "unknown",
+    "isPopped": false
+  },
+  "__v": 0,
+  "createdAt": {
+    "$date": "2026-05-02T20:56:29.037Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-02T20:56:29.037Z"
+  }
+}]

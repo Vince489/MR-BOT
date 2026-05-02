@@ -251,7 +251,7 @@ export class StreamingResponseProcessor extends EventEmitter {
         this.agent.loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
 
         // Post-execution loop check
-        if (this.agent.loopDetector.detectToolCallLoop(toolCalls)) {
+        if (this.agent.loopDetector.detectToolCallLoop(toolCalls).detected) {
           if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
 
           // Memory integration: Commit loop detection insight
@@ -370,7 +370,7 @@ export class StreamingResponseProcessor extends EventEmitter {
       loopDetector.updateRecentToolCalls(assistantMessage.toolCalls, allCallsSuccessful);
 
       // Post-execution loop check
-      if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
+      if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls).detected) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
         
         // Memory integration: Commit loop detection insight
