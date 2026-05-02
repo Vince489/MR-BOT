@@ -134,13 +134,14 @@ this.systemPrompt = (config.tools && config.tools.length > 0)
 To process any request, you MUST first use the \`recordThought\` tool to commit your reasoning to the system logs.
 You cannot provide a response until your thoughts have been recorded via the tool.
 
-**Instructions:**
+  **Instructions:**
 1. **Mandatory Thought Recording**: Before generating any response, you MUST use the \`recordThought\` tool to externalize your reasoning process.
 2. **Structured Reasoning**: The \`recordThought\` tool requires structured input including:
    - Current reasoning step
    - Hypothesis about the user's goal
    - Plan of action with tools to be used
    - Any uncertainties or alternatives considered
+   - **Conversation Context (Optional)**: Include relevant context from the conversation history in the 'context' field when available and relevant
 3. **Progress Tracking**: Use the \`taskProgress\` parameter in ALL tool calls to track your progress.
 
 ## Progress Tracking Protocol
@@ -272,30 +273,30 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
        { role: "user", content: userInput }
      ];
 
-     // Define the JSON schema to enforce structured response
-     const responseFormat = {
-       type: "json_object",
-       schema: {
-         type: "object",
-         properties: {
-           action: { type: "string" },
-           data: { type: "object" },
-           requested_tools: {
-             type: "array",
-             items: {
-               type: "object",
-               properties: {
-                 tool: { type: "string" },
-                 arguments: { type: "object" }
-               },
-               required: ["tool", "arguments"]
-             }
-           }
-         },
-         required: ["action"],
-         additionalProperties: false
-       }
-     };
+    // Define the JSON schema to enforce structured response
+    const responseFormat = {
+      type: "json_object",
+      schema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          data: { type: "object" },
+          requested_tools: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                tool: { type: "string" },
+                arguments: { type: "object" }
+              },
+              required: ["tool", "arguments"]
+            }
+          }
+        },
+        required: ["requested_tools"],
+        additionalProperties: false
+      }
+    };
 
      const response = await this.client.chat.complete({
        model: this.model,
@@ -361,7 +362,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
             }
           }
         },
-        required: ["action"],
+        required: ["requested_tools"],
         additionalProperties: false
       }
     };
@@ -684,9 +685,14 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
     if (!this.storageManager) {
       throw new Error('Storage not configured. Pass storageType in Agent constructor.');
     }
-    
+
     if (!this.storageManager.initialized) {
       await this.storageManager.initialize(this.storageType || 'no-memory', this.debug);
+
+      // Set the session ID on the MongoDB storage if it's being used
+      if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+        this.storageManager.mongoStorage.setSessionId(this.sessionId);
+      }
     }
   }
 

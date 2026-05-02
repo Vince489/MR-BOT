@@ -28,8 +28,9 @@ async function main() {
     enableEvents: true // Enable event system for progress tracking
   });
 
-    // Load existing history
-    const history = await agent.loadHistory();
+    // Load existing history - this will initialize the storage if needed
+    // Explicitly pass the session ID to ensure it's used
+    const history = await agent.loadHistory(process.env.SESSION_ID);
 
     // Create readline interface
     const rl = readline.createInterface({

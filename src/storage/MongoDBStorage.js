@@ -8,11 +8,10 @@ import { mongoDBConnection } from './MongoDBConnection.js';
  */
 class MongoDBStorage {
   constructor() {
-    if (!process.env.SESSION_ID) {
-      throw new Error('SESSION_ID environment variable must be set for MongoDB storage');
-    }
-    this.sessionId = process.env.SESSION_ID;
+    // Don't require SESSION_ID in constructor - it can be set later
+    this.sessionId = process.env.SESSION_ID || null;
     this.debug = false; // Will be set by StorageManager
+    this.connectionInitialized = false; // Track if we've initialized the connection
   }
 
   setDebug(debug) {
@@ -25,21 +24,28 @@ class MongoDBStorage {
    */
   async loadHistory(sessionId) {
     try {
-      // Try to connect to MongoDB
-      await mongoDBConnection.connect();
-      
-      const history = await Message.loadHistory(sessionId);
-      
-      if (this.debug && history.length > 0) {
-        console.log(`🗄️  Loaded ${history.length} messages from MongoDB history for session ${sessionId}`);
-      } else if (this.debug) {
-        console.log(`🗄️  No previous MongoDB history found for session ${sessionId}. Starting fresh.`);
+      // Initialize connection if not already done
+      if (!this.connectionInitialized) {
+        await mongoDBConnection.connect();
+        this.connectionInitialized = true;
       }
-      
+
+      const history = await Message.loadHistory(sessionId);
+
+      if (this.debug) {
+        if (history.length > 0) {
+          console.log(`🗄️  Loaded ${history.length} messages from MongoDB history for session ${sessionId}`);
+        } else {
+          console.log(`🗄️  No previous MongoDB history found for session ${sessionId}. Starting fresh.`);
+        }
+      }
+
       return history;
     } catch (error) {
-      if (this.debug) console.log('⚠️  Error loading MongoDB history:', error.message);
-      if (this.debug) console.log('🗄️  Starting with empty history.');
+      if (this.debug) {
+        console.log('⚠️  Error loading MongoDB history:', error.message);
+        console.log('🗄️  Starting with empty history.');
+      }
       return [];
     }
   }

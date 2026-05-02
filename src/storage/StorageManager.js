@@ -21,30 +21,30 @@ class StorageManager {
   /**
    * Initialize storage with the specified type (set-and-forget)
    */
-  async initialize(storageType, debug = false) {
+   async initialize(storageType, debug = false) {
     if (this.initialized) {
       throw new Error('StorageManager already initialized. Restart application to change storage type.');
     }
-    
+
     if (!storageType) {
       throw new Error('Storage type must be specified');
     }
-    
+
     this.storageType = storageType.toLowerCase();
-    
+
     if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
       this.currentStorage = this.mongoStorage;
       this.mongoStorage.setDebug(debug);
-      console.log('🗄️  Using MongoDB storage');
-      
-      // Try to connect to MongoDB and test the connection
-      try {
-        await this.mongoStorage.loadHistory();
-        console.log('✅ MongoDB connection successful');
-      } catch (error) {
-        console.log('❌ MongoDB connection failed:', error.message);
-        throw new Error(`MongoDB connection failed: ${error.message}`);
+
+      // Set session ID from environment if available
+      if (process.env.SESSION_ID) {
+        this.mongoStorage.setSessionId(process.env.SESSION_ID);
       }
+
+      console.log('🗄️  Using MongoDB storage');
+
+      // No need to test connection here - it will be initialized on first use
+      // This avoids duplicate connection attempts and log messages
     } else if (this.storageType === 'json') {
       this.currentStorage = this.jsonStorage;
       this.jsonStorage.setDebug(debug);
@@ -60,9 +60,9 @@ class StorageManager {
     } else {
       throw new Error(`Unknown storage type: ${storageType}. Use 'mongodb', 'json', 'no-memory', or 'array'.`);
     }
-    
+
     this.initialized = true;
-    
+
     // Load initial history
     const history = await this.loadHistory();
     return history;
@@ -76,7 +76,12 @@ class StorageManager {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
-    
+
+    // Ensure session ID is set on the storage instance
+    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+      this.mongoStorage.setSessionId(sessionId);
+    }
+
     return await this.currentStorage.loadHistory(sessionId);
   }
 
@@ -89,7 +94,12 @@ class StorageManager {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
-    
+
+    // Ensure session ID is set on the storage instance
+    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+      this.mongoStorage.setSessionId(sessionId);
+    }
+
     return await this.currentStorage.saveHistory(sessionId, messages);
   }
 
@@ -101,7 +111,12 @@ class StorageManager {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
-    
+
+    // Ensure session ID is set on the storage instance
+    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+      this.mongoStorage.setSessionId(sessionId);
+    }
+
     return await this.currentStorage.clearHistory(sessionId);
   }
 
@@ -113,7 +128,12 @@ class StorageManager {
     if (!this.currentStorage) {
       throw new Error('Storage not initialized');
     }
-    
+
+    // Ensure session ID is set on the storage instance
+    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+      this.mongoStorage.setSessionId(sessionId);
+    }
+
     return await this.currentStorage.getStats(sessionId);
   }
 

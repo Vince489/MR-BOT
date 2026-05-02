@@ -52,7 +52,7 @@ export const thoughtTool = {
         },
         context: {
           type: "string",
-          description: "Relevant context from conversation history informing this reasoning."
+          description: "Optional: Relevant context from conversation history informing this reasoning. Include when available and relevant."
         },
         alternativesConsidered: {
           type: "array",
@@ -106,13 +106,18 @@ export const thoughtTool = {
 
 
     try {
-      // 1. Validation
-      if (hypothesis.length < 5) {
-        return { success: false, message: "Hypothesis is too short. Please provide a more detailed reasoning." };
-      }
-      if (plan.length === 0) {
-        return { success: false, message: "Plan cannot be empty." };
-      }
+    // 1. Validation
+    if (hypothesis.length < 5) {
+      return { success: false, message: "Hypothesis is too short. Please provide a more detailed reasoning." };
+    }
+    if (plan.length === 0) {
+      return { success: false, message: "Plan cannot be empty." };
+    }
+    // Check if context is empty and this is not the first message
+    if (context === "" && userInput !== "") {
+      console.warn('⚠️  [THOUGHT TOOL] Context field is empty but user input is available. The AI should include relevant conversation context in the thought record.');
+      // We'll still save the thought, but with a warning
+    }
 
       // 2. Get session information from environment
       const sessionId = process.env.SESSION_ID;
