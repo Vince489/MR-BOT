@@ -1,8 +1,9 @@
 import { EventEmitter } from "events";
+import { LoopDetector } from "./LoopDetector.js";
 
 /**
  * Circuit Breaker Pattern for Agent.js Loop Detection
- * 
+ *
  * Transforms loop detection from a simple "stop-gap" into a resilient system-level safety mechanism.
  * Provides three distinct states: CLOSED (Healthy), OPEN (Tripped), and HALF-OPEN (Testing).
  */
@@ -11,7 +12,7 @@ export class CircuitBreaker extends EventEmitter {
    * Creates a new CircuitBreaker instance
    * @param {Object} config - Configuration object
    * @param {number} [config.maxRecentCalls=3] - How many recent calls to track
-   * @param {number} [config.loopThreshold=2] - How many failed attempts before detecting a loop
+   * @param {number} [config.loopThreshold=2] - Number of repeated sequences to detect a loop
    * @param {boolean} [config.enablePatternDetection=true] - Enable advanced A->B->A->B pattern detection
    * @param {number} [config.cooldownPeriod=30000] - Cooldown period in milliseconds (30 seconds)
    * @param {number} [config.globalTripThreshold=5] - Global circuit trips after this many failures
@@ -36,9 +37,16 @@ export class CircuitBreaker extends EventEmitter {
       ...config
     };
 
+    // Initialize LoopDetector for pattern detection
+    this.loopDetector = new LoopDetector({
+      maxRecentCalls: this.config.maxRecentCalls,
+      loopThreshold: this.config.loopThreshold,
+      enablePatternDetection: this.config.enablePatternDetection
+    });
+
     // Per-tool state tracking
     this.states = new Map(); // toolSignature -> CircuitState
-    
+
     // Global circuit state (affects all tools)
     this.globalState = {
       state: 'CLOSED',
@@ -73,11 +81,28 @@ export class CircuitBreaker extends EventEmitter {
     // Check global circuit state first
     const globalState = this._checkGlobalState();
     if (globalState.state === 'OPEN') {
-      return { 
-        allow: false, 
+      return {
+        allow: false,
         reason: 'Global circuit breaker is OPEN',
         cooldownRemaining: Math.max(0, globalState.cooldownEnds - Date.now())
       };
+    }
+
+    // Check for loops using LoopDetector
+    if (this.config.enablePatternDetection) {
+      const loopDetected = this.loopDetector.detectToolCallLoop([{ function: { name: toolSignature, arguments: {} } }]);
+      if (loopDetected.detected) {
+        this._tripCircuit(toolSignature, `Loop detected: ${loopDetected.pattern || toolSignature}`, Date.now());
+        this.emit('loop-detected', {
+          tool: toolSignature,
+          pattern: loopDetected.pattern || toolSignature,
+          timestamp: Date.now()
+        });
+        return {
+          allow: false,
+          reason: `Loop detected: ${loopDetected.pattern || toolSignature}`
+        };
+      }
     }
 
     // Check per-tool circuit state
@@ -102,8 +127,8 @@ export class CircuitBreaker extends EventEmitter {
           });
           return { allow: true, reason: 'Transitioned to HALF-OPEN for testing' };
         }
-        return { 
-          allow: false, 
+        return {
+          allow: false,
           reason: 'Circuit is OPEN (tripped)',
           cooldownRemaining: state.cooldownEnds - now
         };
@@ -112,8 +137,8 @@ export class CircuitBreaker extends EventEmitter {
         if (state.halfOpenAttempts >= this.config.halfOpenAttempts) {
           // Too many attempts in HALF-OPEN, trip again
           this._tripCircuit(toolSignature, 'Too many attempts in HALF-OPEN', now);
-          return { 
-            allow: false, 
+          return {
+            allow: false,
             reason: 'HALF-OPEN attempts exceeded, circuit tripped again',
             cooldownRemaining: state.cooldownEnds - now
           };
@@ -128,14 +153,20 @@ export class CircuitBreaker extends EventEmitter {
   /**
    * Records a successful tool call and updates circuit breaker state
    * @param {string} toolSignature - Unique signature for the tool call
+   * @param {Object} [toolCallArguments={}] - Arguments passed to the tool call
    */
-  recordSuccess(toolSignature) {
+  recordSuccess(toolSignature, toolCallArguments = {}) {
     const state = this._getState(toolSignature);
     const now = Date.now();
 
     // Update statistics
     this.stats.totalSuccesses++;
     state.totalSuccesses++;
+
+    // Update loop detection history
+    if (this.config.enablePatternDetection) {
+      this.loopDetector.updateRecentToolCalls([{ function: { name: toolSignature, arguments: toolCallArguments } }], true);
+    }
 
     // If in HALF-OPEN and successful, return to CLOSED
     if (state.state === 'HALF-OPEN') {
@@ -169,8 +200,9 @@ export class CircuitBreaker extends EventEmitter {
    * Records a failed tool call and updates circuit breaker state
    * @param {string} toolSignature - Unique signature for the tool call
    * @param {string} [reason] - Optional reason for the failure
+   * @param {Object} [toolCallArguments={}] - Arguments passed to the tool call
    */
-  recordFailure(toolSignature, reason = 'Tool call failed') {
+  recordFailure(toolSignature, reason = 'Tool call failed', toolCallArguments = {}) {
     const state = this._getState(toolSignature);
     const now = Date.now();
 
@@ -178,6 +210,11 @@ export class CircuitBreaker extends EventEmitter {
     this.stats.totalFailures++;
     state.totalFailures++;
     this.globalState.failures++;
+
+    // Update loop detection history
+    if (this.config.enablePatternDetection) {
+      this.loopDetector.updateRecentToolCalls([{ function: { name: toolSignature, arguments: toolCallArguments } }], false);
+    }
 
     // Increase heat based on failure severity
     const heatIncrease = this._calculateHeatIncrease(state, reason);
@@ -486,6 +523,16 @@ export class CircuitBreaker extends EventEmitter {
   updateConfig(newConfig) {
     const previousConfig = { ...this.config };
     this.config = { ...this.config, ...newConfig };
+
+    // Propagate changes to LoopDetector
+    if (this.loopDetector) {
+      if (newConfig.loopThreshold !== undefined) {
+        this.loopDetector.loopThreshold = this.config.loopThreshold;
+      }
+      if (newConfig.enablePatternDetection !== undefined) {
+        this.loopDetector.enablePatternDetection = this.config.enablePatternDetection;
+      }
+    }
 
     this.emit('circuit-breaker-config-update', {
       previousConfig: previousConfig,

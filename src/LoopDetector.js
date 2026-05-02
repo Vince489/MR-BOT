@@ -39,50 +39,80 @@ export class LoopDetector {
   /**
    * Detects if the same tool with the same arguments is being called repeatedly.
    * @param {Array} toolCalls - Array of tool calls to check
-   * @returns {boolean} - True if a loop is detected
+   * @returns {Object} - Object with detected (boolean) and pattern (string) if a loop is detected
    */
   detectToolCallLoop(toolCalls) {
-    // Single-call check: same signature failed loopThreshold times
+    // Single-call check: same signature called loopThreshold times
     if (toolCalls.length === 1) {
       const call = toolCalls[0];
       const callSignature = this.getCallSignature(call.function.name, call.function.arguments);
       const recentMatches = this.recentToolCalls.filter(
-        tc => tc.signature === callSignature && tc.success === false
+        tc => tc.signature === callSignature
       );
       if (recentMatches.length >= this.loopThreshold) {
-        return true;
+        return { detected: true, pattern: callSignature };
       }
     }
 
     // Advanced A->B->A->B pattern detection
-    if (this.enablePatternDetection && this._detectComplexLoop(toolCalls)) {
-      return true;
+    if (this.enablePatternDetection) {
+      const complexLoop = this._detectComplexLoop(toolCalls);
+      if (complexLoop) {
+        return { detected: true, pattern: complexLoop.pattern || toolCalls[0].function.name };
+      }
     }
 
-    return false;
+    return { detected: false };
   }
 
   /**
-   * Detects complex looping patterns like A -> B -> A -> B.
-   * @param {Array} toolCalls
-   * @returns {boolean}
+   * Detects complex looping patterns like A->B->A->B or A->B->C->A->B->C.
+   * @param {Array} toolCalls - Array of tool calls to check
+   * @returns {Object} - Object with detected (boolean) and pattern (string) if a loop is detected
    * @private
    */
   _detectComplexLoop(toolCalls) {
-    if (toolCalls.length === 0) return false;
+    if (this.recentToolCalls.length < 4) return { detected: false };
 
-    const recentCalls = this.recentToolCalls.slice(0, this.maxRecentCalls * 2);
-    if (recentCalls.length >= 4) {
-      const pattern = recentCalls.slice(0, 2);
-      const nextPattern = recentCalls.slice(2, 4);
-      if (
-        pattern[0].signature === nextPattern[0].signature &&
-        pattern[1].signature === nextPattern[1].signature
-      ) {
-        return true;
+    // Try pattern lengths from 2 to 3
+    for (let patternLength = 2; patternLength <= 3; patternLength++) {
+      const requiredRepeats = this.loopThreshold;
+      const requiredLength = patternLength * requiredRepeats;
+
+      if (this.recentToolCalls.length >= requiredLength) {
+        const pattern = this.recentToolCalls.slice(0, patternLength);
+        let repeats = 1;
+
+        for (let i = patternLength; i <= this.recentToolCalls.length - patternLength; i += patternLength) {
+          const nextSegment = this.recentToolCalls.slice(i, i + patternLength);
+          if (this._patternsMatch(pattern, nextSegment)) {
+            repeats++;
+            if (repeats >= requiredRepeats) {
+              const patternString = pattern.map(tc => tc.signature.split(':')[0]).join('→');
+              return { detected: true, pattern: patternString };
+            }
+          } else {
+            break;
+          }
+        }
       }
     }
-    return false;
+    return { detected: false };
+  }
+
+  /**
+   * Checks if two patterns match exactly.
+   * @param {Array} patternA - First pattern to compare
+   * @param {Array} patternB - Second pattern to compare
+   * @returns {boolean} - True if patterns match
+   * @private
+   */
+  _patternsMatch(patternA, patternB) {
+    if (patternA.length !== patternB.length) return false;
+    for (let i = 0; i < patternA.length; i++) {
+      if (patternA[i].signature !== patternB[i].signature) return false;
+    }
+    return true;
   }
 
   /**
