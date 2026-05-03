@@ -698,9 +698,9 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
       await this.storageManager.initialize(this.storageType || 'no-memory', this.debug);
 
       // Set the session ID on the MongoDB storage if it's being used
-      if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
-        this.storageManager.mongoStorage.setSessionId(this.sessionId);
-      }
+       if (this.storageType === 'mongodb') {
+         this.storageManager.mongoStorage.setSessionId(this.sessionId);
+       }
     }
   }
 

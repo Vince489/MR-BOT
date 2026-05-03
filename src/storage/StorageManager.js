@@ -32,8 +32,8 @@ class StorageManager {
 
     this.storageType = storageType.toLowerCase();
 
-    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
-      this.currentStorage = this.mongoStorage;
+     if (this.storageType === 'mongodb') {
+       this.currentStorage = this.mongoStorage;
       this.mongoStorage.setDebug(debug);
 
       // Set session ID from environment if available
@@ -73,9 +73,9 @@ class StorageManager {
       throw new Error('Storage not initialized');
     }
 
-    // Ensure session ID is set on the storage instance
-    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
-      this.mongoStorage.setSessionId(sessionId);
+     // Ensure session ID is set on the storage instance
+     if (this.storageType === 'mongodb') {
+       this.mongoStorage.setSessionId(sessionId);
     }
 
     return await this.currentStorage.loadHistory(sessionId);
@@ -92,7 +92,7 @@ class StorageManager {
     }
 
     // Ensure session ID is set on the storage instance
-    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+    if (this.storageType === 'mongodb') {
       this.mongoStorage.setSessionId(sessionId);
     }
 
@@ -109,7 +109,7 @@ class StorageManager {
     }
 
     // Ensure session ID is set on the storage instance
-    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+    if (this.storageType === 'mongodb') {
       this.mongoStorage.setSessionId(sessionId);
     }
 
@@ -126,7 +126,7 @@ class StorageManager {
     }
 
     // Ensure session ID is set on the storage instance
-    if (this.storageType === 'mongodb' || this.storageType === 'mongo') {
+    if (this.storageType === 'mongodb') {
       this.mongoStorage.setSessionId(sessionId);
     }
 
