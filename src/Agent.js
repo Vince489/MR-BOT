@@ -1,4 +1,5 @@
 import { Mistral } from "@mistralai/mistralai";
+import { OpenRouter } from "@openrouter/sdk";
 import Thought from './models/Thought.js';
 import Session from './models/Session.js';
 import { EventEmitter } from "events";
@@ -18,7 +19,8 @@ export class Agent extends EventEmitter {
   /**
    * Creates a new Agent instance with Circuit Breaker integration
    * @param {Object} config - Configuration object
-   * @param {string} config.apiKey - Mistral API key
+   * @param {string} config.apiKey - API key (Mistral or OpenRouter)
+   * @param {string} [config.provider="mistral"] - Provider to use: "mistral" or "openrouter"
    * @param {string} [config.model="mistral-medium-2505"] - Model to use
    * @param {number} [config.temperature=0.5] - Temperature for response generation
    * @param {string} config.systemPrompt - System instructions for the agent
@@ -34,22 +36,31 @@ export class Agent extends EventEmitter {
     if (!config.apiKey) throw new Error("apiKey is required");
     if (!config.systemPrompt) throw new Error("systemPrompt is required");
     
-    // Store session ID for chat history management
+    // Store provider and session ID
+    this.provider = config.provider || "mistral";
     this.sessionId = config.sessionId || this._generateSessionId();
 
-    this.client = new Mistral({
-      apiKey: config.apiKey,
-      retryConfig: {
-        strategy: "backoff",
-        backoff: {
-          initialInterval: 1000,
-          maxInterval: 16000,
-          exponent: 2,
-          maxElapsedTime: 60000,
+    // Initialize client based on provider
+    if (this.provider === "openrouter") {
+      this.client = new OpenRouter({
+        apiKey: config.apiKey
+      });
+    } else {
+      // Default to Mistral
+      this.client = new Mistral({
+        apiKey: config.apiKey,
+        retryConfig: {
+          strategy: "backoff",
+          backoff: {
+            initialInterval: 1000,
+            maxInterval: 16000,
+            exponent: 2,
+            maxElapsedTime: 60000,
+          },
+          retryConnectionErrors: true,
         },
-        retryConnectionErrors: true,
-      },
-    });
+      });
+    }
 
 this.model = config.model || "mistral-medium-2505";
     this.temperature = config.temperature !== undefined ? config.temperature : 0.5;
@@ -290,6 +301,44 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
   }
 
   /**
+   * Strip Mistral-specific fields that are incompatible with the OpenRouter SDK.
+   * @private
+   */
+  _toOpenRouterChatRequest(params) {
+    const { responseFormat, ...rest } = params || {};
+    return rest;
+  }
+
+  /**
+   * Make a completion request to the appropriate provider
+   * @private
+   */
+  async _makeCompletion(params) {
+    if (this.provider === 'openrouter') {
+      return await this.client.chat.send({
+        chatRequest: { ...this._toOpenRouterChatRequest(params), stream: false }
+      });
+    } else {
+      return await this.client.chat.complete(params);
+    }
+  }
+
+  /**
+   * Make a streaming request to the appropriate provider
+   * @private
+   */
+  async _makeStream(params) {
+    console.log(`🛰️  [REQ] provider=${this.provider} model=${params.model} tools=${params.tools?.length ?? 0} toolChoice=${JSON.stringify(params.toolChoice) ?? 'auto'} messages=${params.messages?.length ?? 0}`);
+    if (this.provider === 'openrouter') {
+      return await this.client.chat.send({
+        chatRequest: { ...this._toOpenRouterChatRequest(params), stream: true }
+      });
+    } else {
+      return await this.client.chat.stream(params);
+    }
+  }
+
+  /**
    * Execute a non-streaming request with tool management and intent capture
    * @param {Array} history - Conversation history
    * @param {string} userInput - User input message
@@ -304,14 +353,21 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
      // Round 1: force recordThought via toolChoice; defer responseFormat until round 2+
      const forceRecordThought = !!this.handlers?.recordThought;
-     const response = await this.client.chat.complete({
+
+     // Build params - OpenRouter doesn't support responseFormat like Mistral
+     const params = {
        model: this.model,
        messages: messages,
        ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
-       ...(forceRecordThought
-         ? { toolChoice: { type: "function", function: { name: "recordThought" } } }
-         : { responseFormat: this.responseFormat })
-     });
+       ...(forceRecordThought && { toolChoice: { type: "function", function: { name: "recordThought" } } })
+     };
+
+     // Only add responseFormat for Mistral
+     if (!forceRecordThought && this.provider === 'mistral') {
+       params.responseFormat = this.responseFormat;
+     }
+
+     const response = await this._makeCompletion(params);
 
      // 🚀 DEVELOPMENT LOGGING: Show current progress state before processing response
      if (this.debug && this.progressState.size > 0) {
@@ -348,14 +404,22 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
     // Round 1: force recordThought via toolChoice; defer responseFormat until round 2+
     const forceRecordThought = !!this.handlers?.recordThought;
-    const stream = await this.client.chat.stream({
+    console.log(`🧪 [executeStream] handlers=${Object.keys(this.handlers || {}).join(',') || 'none'} forceRecordThought=${forceRecordThought} historyLen=${(history || []).length}`);
+
+    // Build params - OpenRouter doesn't support responseFormat like Mistral
+    const params = {
       model: this.model,
       messages: messages,
       ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
-      ...(forceRecordThought
-        ? { toolChoice: { type: "function", function: { name: "recordThought" } } }
-        : { responseFormat: this.responseFormat })
-    });
+      ...(forceRecordThought && { toolChoice: { type: "function", function: { name: "recordThought" } } })
+    };
+
+    // Only add responseFormat for Mistral
+    if (!forceRecordThought && this.provider === 'mistral') {
+      params.responseFormat = this.responseFormat;
+    }
+
+    const stream = await this._makeStream(params);
 
     // Process the stream and handle the structured response
     let result;

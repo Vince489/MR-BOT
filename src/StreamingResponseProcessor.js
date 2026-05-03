@@ -177,7 +177,7 @@ export class StreamingResponseProcessor extends EventEmitter {
     let currentStream = stream;
     let currentMessages = [...messages];
     let round = 1;
-    const { client, model, loopDetector, maxRounds = 10 } = this.agent;
+    const { model, loopDetector, maxRounds = 10 } = this.agent;
 
     while (round <= maxRounds) {
       if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} started`);
@@ -191,8 +191,10 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       // When responseFormat is active the model's content is structured JSON,
       // so route chunks through an extractor that surfaces only the unescaped
-      // value of "final_reply" to the caller.
-      const useExtractor = !!this.agent.responseFormat;
+      // value of "final_reply" to the caller. Providers other than Mistral
+      // don't receive responseFormat (see Agent._toOpenRouterChatRequest),
+      // so they emit plain text and must bypass the extractor.
+      const useExtractor = this.agent.provider !== 'openrouter' && !!this.agent.responseFormat;
       const feedFinalReply = (useExtractor && onChunk)
         ? this._makeFinalReplyStreamer(onChunk)
         : null;
@@ -348,7 +350,7 @@ export class StreamingResponseProcessor extends EventEmitter {
 
         // Prepare for next round - sanitize messages for API compliance
         const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-        currentStream = await this.agent.client.chat.stream({
+        currentStream = await this.agent._makeStream({
           model: this.agent.model,
           messages: apiMessages,
           ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() }),
@@ -468,7 +470,7 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       // Prepare for next round - sanitize messages for API compliance
       const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-      currentStream = await client.chat.stream({
+      currentStream = await this.agent._makeStream({
         model,
         messages: apiMessages,
         ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() }),

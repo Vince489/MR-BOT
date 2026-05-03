@@ -4,7 +4,8 @@
   "description": "",
   "main": "Agent.js",
   "scripts": {
-    "start": "node src/scripts/chat-5"
+    "start": "node src/scripts/chat-5",
+    "start:6": "node src/scripts/chat-6"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,7 @@
   "type": "module",
   "dependencies": {
     "@mistralai/mistralai": "^1.14.0",
+    "@openrouter/sdk": "^0.12.24",
     "cheerio": "^1.2.0",
     "chrono-node": "^2.9.0",
     "countries-and-timezones": "^3.8.0",
