@@ -1,6 +1,4 @@
 import { Mistral } from "@mistralai/mistralai";
-import Thought from './models/Thought.js';
-import Session from './models/Session.js';
 import { EventEmitter } from "events";
 import { CircuitBreaker } from "./CircuitBreaker.js";
 import { LoopDetector } from "./LoopDetector.js";
@@ -275,7 +273,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
     // Define the JSON schema to enforce structured response
     const responseFormat = {
-      type: "json_object",
+      name: "tool_response",
       schema: {
         type: "object",
         properties: {
@@ -294,8 +292,10 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
           }
         },
         required: ["requested_tools"],
-        additionalProperties: false
-      }
+        additionalProperties: false,
+        title: "ToolResponse"
+      },
+      strict: true
     };
 
      const response = await this.client.chat.complete({
@@ -344,7 +344,7 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
     // Define the JSON schema to enforce structured response
     const responseFormat = {
-      type: "json_object",
+      name: "tool_response",
       schema: {
         type: "object",
         properties: {
@@ -363,8 +363,10 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
           }
         },
         required: ["requested_tools"],
-        additionalProperties: false
-      }
+        additionalProperties: false,
+        title: "ToolResponse"
+      },
+      strict: true
     };
 
     const stream = await this.client.chat.stream({
