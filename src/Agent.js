@@ -273,36 +273,39 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
     // Define the JSON schema to enforce structured response
     const responseFormat = {
-      name: "tool_response",
-      schema: {
-        type: "object",
-        properties: {
-          action: { type: "string" },
-          data: { type: "object" },
-          requested_tools: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                tool: { type: "string" },
-                arguments: { type: "object" }
-              },
-              required: ["tool", "arguments"]
+      type: "json_schema",
+      json_schema: {
+        name: "tool_response",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            action: { type: "string" },
+            data: { type: "object" },
+            requested_tools: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tool: { type: "string" },
+                  arguments: { type: "object" }
+                },
+                required: ["tool", "arguments"]
+              }
             }
-          }
-        },
-        required: ["requested_tools"],
-        additionalProperties: false,
-        title: "ToolResponse"
-      },
-      strict: true
+          },
+          required: ["requested_tools"],
+          additionalProperties: false,
+          title: "ToolResponse"
+        }
+      }
     };
 
      const response = await this.client.chat.complete({
        model: this.model,
        messages: messages,
        ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
-       responseFormat: responseFormat
+     response_format: responseFormat
      });
 
      // 🚀 DEVELOPMENT LOGGING: Show current progress state before processing response
@@ -344,36 +347,39 @@ You MUST use the \`taskProgress\` parameter in ALL tool calls to track your prog
 
     // Define the JSON schema to enforce structured response
     const responseFormat = {
-      name: "tool_response",
-      schema: {
-        type: "object",
-        properties: {
-          action: { type: "string" },
-          data: { type: "object" },
-          requested_tools: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                tool: { type: "string" },
-                arguments: { type: "object" }
-              },
-              required: ["tool", "arguments"]
+      type: "json_schema",
+      json_schema: {
+        name: "tool_response",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            action: { type: "string" },
+            data: { type: "object" },
+            requested_tools: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tool: { type: "string" },
+                  arguments: { type: "object" }
+                },
+                required: ["tool", "arguments"]
+              }
             }
-          }
-        },
-        required: ["requested_tools"],
-        additionalProperties: false,
-        title: "ToolResponse"
-      },
-      strict: true
+          },
+          required: ["requested_tools"],
+          additionalProperties: false,
+          title: "ToolResponse"
+        }
+      }
     };
 
     const stream = await this.client.chat.stream({
       model: this.model,
       messages: messages,
       ...(this.tools.length > 0 && { tools: this.toolManager.getApiTools() }),
-      responseFormat: responseFormat
+      response_format: responseFormat
     });
 
     // Process the stream and handle the structured response
