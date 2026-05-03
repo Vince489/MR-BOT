@@ -1,7 +1,6 @@
 /**
  * Streaming Response Processor
- * Handles unified streaming message accumulation, tool call parsing, and memory integration
- * for both Victor (structured monologue) and Sentinel (batch processing) modes
+ * Handles unified streaming message accumulation and tool call parsing
  */
 import { EventEmitter } from "events";
 
@@ -10,26 +9,14 @@ export class StreamingResponseProcessor extends EventEmitter {
    * Creates a new StreamingResponseProcessor instance
    * @param {Object} agent - The Agent instance providing context and tools
    */
-  constructor(agent) {
-    super();
-    this.agent = agent;
-    this.debug = agent.debug || false;
-    
-    // Progress tracking state - Map-based for atomic merging
-    this.progressState = new Map();
-    this.progressHistory = [];
-    
-    // Lightweight progress mode for Victor
-    this.lightweightMode = false;
-    
-    // Batch processing state for Sentinel
-    this.batchMode = false;
-    this.batchType = null;
-    
-    // Memory integration state
-    this.memoryMode = false;
-    this.victorMode = false;
-    this.sentinelMode = false;
+   constructor(agent) {
+     super();
+     this.agent = agent;
+     this.debug = agent.debug || false;
+
+     // Progress tracking state - Map-based for atomic merging
+     this.progressState = new Map();
+     this.progressHistory = [];
 
     // API message sanitization helper to prevent invalid role payloads
     this.validRoles = new Set(['system', 'user', 'assistant', 'tool']);
@@ -70,25 +57,6 @@ export class StreamingResponseProcessor extends EventEmitter {
     }).filter(Boolean);
   }
 
-  /**
-   * Set agent mode and configure processor accordingly
-   * @param {string} mode - 'victor', 'sentinel', or 'standard'
-   * @param {string} [batchType] - For Sentinel mode, specify batch type (e.g., 'triage')
-   */
-  setMode(mode, batchType = null) {
-    this.victorMode = mode === 'victor';
-    this.sentinelMode = mode === 'sentinel';
-    this.batchType = batchType;
-    
-    // Configure modes
-    this.lightweightMode = this.victorMode;
-    this.batchMode = this.sentinelMode;
-    this.memoryMode = this.victorMode || this.sentinelMode;
-    
-    if (this.debug) {
-      console.log(`🔄 [PROCESSOR] Mode set to: ${mode}${batchType ? ` (${batchType})` : ''}`);
-    }
-  }
 
   /**
    * Process streaming API response with unified logic
@@ -99,12 +67,7 @@ export class StreamingResponseProcessor extends EventEmitter {
    */
   async processStreamResponse(stream, messages, onChunk) {
     if (this.debug) {
-      console.log(`🔄 [PROCESSOR] Starting stream processing in ${this.victorMode ? 'Victor' : this.sentinelMode ? 'Sentinel' : 'Standard'} mode`);
-    }
-
-    // Memory integration: Recall relevant memories before planning
-    if (this.memoryMode) {
-      await this.beforePlanning(messages);
+      console.log(`🔄 [PROCESSOR] Starting stream processing`);
     }
 
     let currentStream = stream;
@@ -180,22 +143,32 @@ export class StreamingResponseProcessor extends EventEmitter {
       // Not a JSON response, proceed as usual
     }
 
-    // If it's a structured response, handle it
-    if (isStructuredResponse && parsedContent) {
-        if (this.debug) console.log(`📊 [STREAM LOOP] Round ${round} - Structured response detected`);
+        // If it's a structured response, handle it
+        if (isStructuredResponse && parsedContent) {
+            if (this.debug) console.log(`📊 [STREAM LOOP] Round ${round} - Structured response detected`);
 
-        // Extract the final reply and requested tools
-        const finalReply = parsedContent.final_reply;
-        const requestedTools = parsedContent.requested_tools || [];
+            // Ensure the JSON response always includes a final_reply property
+            let finalReply;
+            if (parsedContent.final_reply !== undefined) {
+              finalReply = parsedContent.final_reply;
+            } else {
+              // Fallback: Use the entire content as the final reply if final_reply is missing
+              finalReply = assistantMessage.content;
+              if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - final_reply property missing, using assistantMessage.content as fallback`);
+            }
+
+            // Extract the requested tools
+            const requestedTools = parsedContent.requested_tools || [];
+
+            // Validate the presence of required properties
+            if (this.debug && !parsedContent.final_reply) {
+              console.warn(`⚠️ [STREAM LOOP] Round ${round} - final_reply property is missing in the JSON response.`);
+            }
 
         // If there are no requested tools, return the final reply
         if (requestedTools.length === 0) {
           if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No requested tools, task finished`);
 
-          // Memory integration: Commit final insights
-          if (this.memoryMode) {
-            await this.afterDecision({ content: finalReply }, { round, type: 'completion' });
-          }
 
           return {
             response: finalReply,
@@ -233,10 +206,6 @@ export class StreamingResponseProcessor extends EventEmitter {
         if (!runResult) {
           if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Circuit breaker protection activated`);
 
-          // Memory integration: Commit circuit breaker insight
-          if (this.memoryMode) {
-            await this.afterDecision({ content: "Circuit breaker protection activated" }, { round, type: 'circuitBreaker' });
-          }
 
           return {
             response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
@@ -254,10 +223,6 @@ export class StreamingResponseProcessor extends EventEmitter {
         if (this.agent.loopDetector.detectToolCallLoop(toolCalls)) {
           if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
 
-          // Memory integration: Commit loop detection insight
-          if (this.memoryMode) {
-            await this.afterDecision({ content: "Loop detected: Agent stopped to prevent infinite recursion" }, { round, type: 'loopDetected' });
-          }
 
           return {
             response: "Loop detected: Agent stopped to prevent infinite recursion.",
@@ -287,10 +252,6 @@ export class StreamingResponseProcessor extends EventEmitter {
       if (!assistantMessage.toolCalls || assistantMessage.toolCalls.length === 0) {
         if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No tool calls, task finished`);
 
-        // Memory integration: Commit final insights
-        if (this.memoryMode) {
-          await this.afterDecision({ content: assistantMessage.content }, { round, type: 'completion' });
-        }
 
         return {
           response: assistantMessage.content,
@@ -304,10 +265,6 @@ export class StreamingResponseProcessor extends EventEmitter {
       if (!this._hasRoomForNextRound(currentMessages)) {
         if (this.debug) console.warn(`🛑 [STREAM LOOP] Round ${round} - Context limit reached`);
         
-        // Memory integration: Commit context overflow insight
-        if (this.memoryMode) {
-          await this.afterDecision({ content: "Context limit reached" }, { round, type: 'contextOverflow' });
-        }
         
         return { 
           response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.", 
@@ -321,10 +278,6 @@ export class StreamingResponseProcessor extends EventEmitter {
       if (round >= maxRounds) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Maximum rounds reached`);
         
-        // Memory integration: Commit max rounds insight
-        if (this.memoryMode) {
-          await this.afterDecision({ content: `Maximum rounds (${maxRounds}) reached` }, { round, type: 'maxRounds' });
-        }
         
         return { 
           response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`, 
@@ -352,10 +305,6 @@ export class StreamingResponseProcessor extends EventEmitter {
       if (!runResult) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Circuit breaker protection activated`);
         
-        // Memory integration: Commit circuit breaker insight
-        if (this.memoryMode) {
-          await this.afterDecision({ content: "Circuit breaker protection activated" }, { round, type: 'circuitBreaker' });
-        }
         
         return { 
           response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.", 
@@ -373,10 +322,6 @@ export class StreamingResponseProcessor extends EventEmitter {
       if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
         
-        // Memory integration: Commit loop detection insight
-        if (this.memoryMode) {
-          await this.afterDecision({ content: "Loop detected: Agent stopped to prevent infinite recursion" }, { round, type: 'loopDetected' });
-        }
         
         return { 
           response: "Loop detected: Agent stopped to prevent infinite recursion.", 
@@ -401,10 +346,6 @@ export class StreamingResponseProcessor extends EventEmitter {
       round++;
     }
 
-    // Final fallback
-    if (this.memoryMode) {
-      await this.afterDecision({ content: `Max rounds reached in stream processing` }, { round: maxRounds, type: 'fallback' });
-    }
     
     return { 
       response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`, 
@@ -414,205 +355,7 @@ export class StreamingResponseProcessor extends EventEmitter {
     };
   }
 
-  /**
-   * Process batch streaming for high-volume operations (Sentinel mode)
-   * @param {Object} stream - Streaming response from Mistral client
-   * @param {Array} messages - Conversation messages
-   * @param {string} [batchType] - Type of batch processing (e.g., 'triage')
-   * @param {Function} [onChunk] - Optional callback for each text token
-   * @returns {Promise<{response: string, fullMessages: Array, rounds: number, status: string}>}
-   */
-  async processBatch(stream, messages, batchType = 'triage', onChunk) {
-    if (!this.sentinelMode) {
-      this.setMode('sentinel', batchType);
-    }
 
-    if (this.debug) {
-      console.log(`🔄 [BATCH PROCESSOR] Starting batch processing for ${batchType}`);
-    }
-
-    // Record structured thought for batch start
-    await this.recordStructuredThought(
-      `Starting batch processing for ${batchType}. Optimizing for high-volume operations with parallel tool execution.`,
-      'batchStart'
-    );
-
-    // Memory integration: Recall relevant batch processing memories
-    await this.beforePlanning(messages);
-
-    const result = await this.processStreamResponse(stream, messages, onChunk);
-
-    // Record structured thought for batch completion
-    await this.recordStructuredThought(
-      `Completed batch processing for ${batchType}. Result status: ${result.status}. Rounds: ${result.rounds}.`,
-      'batchCompletion'
-    );
-
-    // Memory integration: Commit batch processing insights
-    await this.afterDecision(result, { batchType, rounds: result.rounds, status: result.status });
-
-    return result;
-  }
-
-  /**
-   * Memory integration: Recall relevant memories before planning
-   * @param {Array} messages - Current conversation messages
-   */
-  async beforePlanning(messages) {
-    try {
-      if (!this.agent.storageManager) return;
-
-      // Extract key topics from recent messages for memory recall
-      const recentContent = messages.slice(-3).map(m => m.content || '').join(' ');
-      const topics = this._extractTopics(recentContent);
-
-      if (this.debug) {
-        console.log(`🧠 [MEMORY] Recalling memories for topics: ${topics.join(', ')}`);
-      }
-
-      // Use recordThought tool to recall relevant memories
-      if (this.agent.handlers?.recordThought) {
-        const recallResult = await this.agent.handlers.recordThought({
-        content: `Recall relevant memories for: ${topics.join(', ')}`,
-        type: 'memoryRecall',
-          topics: topics
-        });
-
-        if (this.debug) {
-          console.log(`🧠 [MEMORY] Recall result:`, recallResult);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to recall memories:', error);
-    }
-  }
-
-  /**
-   * Memory integration: Commit insights to memory after decision
-   * @param {Object} result - The result from tool execution or completion
-   * @param {Object} context - Additional context about the decision
-   */
-  async afterDecision(result, context) {
-    try {
-      if (!this.agent.storageManager) return;
-
-      const insight = {
-        content: result.content || result.response || JSON.stringify(result),
-        type: 'insight',
-        importance: this._calculateImportance(result, context),
-        context: {
-          mode: this.victorMode ? 'victor' : this.sentinelMode ? 'sentinel' : 'standard',
-          batchType: this.batchType,
-          ...context
-        },
-        timestamp: Date.now()
-      };
-
-      if (this.debug) {
-        console.log(`🧠 [MEMORY] Committing insight:`, insight);
-      }
-
-      // Use recordThought tool to commit insight to memory
-      if (this.agent.handlers?.recordThought) {
-        const commitResult = await this.agent.handlers.recordThought(insight);
-        
-        if (this.debug) {
-          console.log(`🧠 [MEMORY] Commit result:`, commitResult);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to commit insight to memory:', error);
-    }
-  }
-
-  /**
-   * Record structured thoughts for Victor mode
-   * @param {string} content - The thought content
-   * @param {string} type - Type of thought (e.g., 'reasoning', 'observation', 'insight')
-   */
-  async recordStructuredThought(content, type = 'reasoning') {
-    if (!this.victorMode && !this.sentinelMode) return;
-
-    try {
-      if (this.agent.handlers?.recordThought) {
-        const thought = {
-          content: content,
-          type: type,
-          mode: this.victorMode ? 'victor' : 'sentinel',
-          timestamp: Date.now()
-        };
-
-        if (this.debug) {
-          console.log(`💭 [THOUGHT] Recording structured thought:`, thought);
-        }
-
-        const result = await this.agent.handlers.recordThought(thought);
-        
-        if (this.debug) {
-          console.log(`💭 [THOUGHT] Thought recorded successfully:`, result);
-        }
-
-        this.emit('structured-thought-recorded', thought);
-      }
-    } catch (error) {
-      console.warn('Failed to record structured thought:', error);
-    }
-  }
-
-  /**
-   * Extract topics from text for memory operations
-   * @param {string} text - Text to analyze
-   * @returns {Array} - Array of extracted topics
-   * @private
-   */
-  _extractTopics(text) {
-    // Simple topic extraction - could be enhanced with NLP
-    const topics = [];
-    const lowerText = text.toLowerCase();
-    
-    // Common topic patterns
-    const patterns = [
-      /\b(email|inbox|message)\b/g,
-      /\b(task|todo|project)\b/g,
-      /\b(priority|urgent|important)\b/g,
-      /\b(customer|client|user)\b/g,
-      /\b(triage|classify|categorize)\b/g
-    ];
-
-    patterns.forEach(pattern => {
-      const matches = lowerText.match(pattern);
-      if (matches) {
-        topics.push(...matches);
-      }
-    });
-
-    return [...new Set(topics)]; // Remove duplicates
-  }
-
-  /**
-   * Calculate importance score for insights
-   * @param {Object} result - The result to score
-   * @param {Object} context - Additional context
-   * @returns {number} - Importance score (1-10)
-   * @private
-   */
-  _calculateImportance(result, context) {
-    let score = 5; // Base score
-
-    // Increase score for completion events
-    if (context.type === 'completion') score += 2;
-    if (context.type === 'contextOverflow') score += 3;
-    if (context.type === 'loopDetected') score += 4;
-
-    // Increase score for batch processing
-    if (context.batchType) score += 2;
-
-    // Increase score for high round counts
-    if (context.rounds && context.rounds > 5) score += 2;
-
-    // Cap at 10
-    return Math.min(score, 10);
-  }
 
   /**
    * Parse progress from tool calls with lightweight mode support
@@ -706,7 +449,7 @@ export class StreamingResponseProcessor extends EventEmitter {
   }
 
   /**
-   * Update task progress with mode-specific handling
+   * Update task progress
    * @private
    */
   updateTaskProgress() {
@@ -717,8 +460,7 @@ export class StreamingResponseProcessor extends EventEmitter {
 
     const progressUpdate = {
       progress: Array.from(state.entries()),
-      allTasksCompleted,
-      mode: this.victorMode ? 'victor' : this.sentinelMode ? 'sentinel' : 'standard'
+      allTasksCompleted
     };
 
     this.emit('task-progress', progressUpdate);

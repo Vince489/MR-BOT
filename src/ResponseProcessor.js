@@ -7,12 +7,46 @@ import { countMessageTokens } from './Tokenizer.js';
 
 export class ResponseProcessor {
   /**
-   * @param {Object} agent - The Agent instance (provides client, model,
-   *   parallelToolCalls, handlers, circuitBreaker, loopDetector)
+   * @param {Object} options - Configuration options
+   * @param {Object} options.client - API client
+   * @param {string} options.model - Model name
+   * @param {Object} options.handlers - Tool handlers
+   * @param {Object} options.circuitBreaker - Circuit breaker instance
+   * @param {Object} options.loopDetector - Loop detector instance
+   * @param {boolean} options.parallelToolCalls - Whether to execute tools in parallel
+   * @param {number} [options.contextLimit=128000] - Token context limit
+   * @param {number} [options.maxRounds=10] - Maximum processing rounds
+   * @param {boolean} [options.debug=false] - Debug mode flag
+   * @param {Object} [options.progressState] - Task progress state
+   * @param {Array} [options.tools=[]] - Available tools
+   * @param {Object} [options.toolManager] - Tool manager instance
    */
-  constructor(agent) {
-    this.agent = agent;
-    this.debug = agent.debug || false;
+  constructor({
+    client,
+    model,
+    handlers,
+    circuitBreaker,
+    loopDetector,
+    parallelToolCalls,
+    contextLimit = 128000,
+    maxRounds = 10,
+    debug = false,
+    progressState = new Map(),
+    tools = [],
+    toolManager = null
+  }) {
+    this.client = client;
+    this.model = model;
+    this.handlers = handlers;
+    this.circuitBreaker = circuitBreaker;
+    this.loopDetector = loopDetector;
+    this.parallelToolCalls = parallelToolCalls;
+    this.contextLimit = contextLimit;
+    this.maxRounds = maxRounds;
+    this.debug = debug;
+    this.progressState = progressState;
+    this.tools = tools;
+    this.toolManager = toolManager;
   }
 
   /**
@@ -83,7 +117,6 @@ export class ResponseProcessor {
     return true;
   }
 
-
   /**
    * Intercepts and removes meta-arguments (like taskProgress) before validation.
    * @param {Object} args - Raw arguments from the LLM
@@ -102,12 +135,54 @@ export class ResponseProcessor {
   }
 
   /**
-   * Executes a single tool call with Circuit Breaker protection.
+   * Determines if an error is retryable (transient) or not.
+   * @param {Error} error - The error to check
+   * @returns {boolean} - True if the error is retryable
+   */
+  _isRetryableError(error) {
+    // Network-related errors
+    if (error.message.includes('network') ||
+        error.message.includes('timeout') ||
+        error.message.includes('ECONN') ||
+        error.message.includes('ETIMEDOUT') ||
+        error.message.includes('ENOTFOUND') ||
+        error.message.includes('fetch failed')) {
+      return true;
+    }
+
+    // Rate limiting errors
+    if (error.message.includes('rate limit') ||
+        error.message.includes('too many requests') ||
+        error.message.includes('429')) {
+      return true;
+    }
+
+    // Service unavailable errors
+    if (error.message.includes('503') ||
+        error.message.includes('service unavailable') ||
+        error.message.includes('maintenance')) {
+      return true;
+    }
+
+    // Temporary server errors
+    if (error.message.includes('500') ||
+        error.message.includes('internal server error')) {
+      return true;
+    }
+
+    // Non-retryable errors
+    return false;
+  }
+
+  /**
+   * Executes a single tool call with Circuit Breaker protection and retry mechanism.
    * @param {Object} toolCall
    * @returns {Promise<Object>} - Tool result message
    */
   async executeToolWithCircuitBreaker(toolCall) {
-    const { circuitBreaker, handlers, loopDetector } = this.agent;
+    const { circuitBreaker, handlers, loopDetector } = this;
+    const maxRetries = 3; // Maximum number of retry attempts
+    let retryCount = 0;
 
     if (!this.validateToolCall(toolCall)) {
       return {
@@ -137,61 +212,84 @@ export class ResponseProcessor {
       };
     }
 
-    try {
-      const handler = handlers[toolCall.function.name];
-      if (!handler) throw new Error(`No handler for tool: ${toolCall.function.name}`);
+    while (retryCount < maxRetries) {
+      try {
+        const handler = handlers[toolCall.function.name];
+        if (!handler) throw new Error(`No handler for tool: ${toolCall.function.name}`);
 
-      const args = JSON.parse(toolCall.function.arguments || "{}");
+        const args = JSON.parse(toolCall.function.arguments || "{}");
 
-      // Extract meta-arguments using the helper method
-      const { cleanArgs, meta } = this._interceptMetaArguments(args);
+        // Extract meta-arguments using the helper method
+        const { cleanArgs, meta } = this._interceptMetaArguments(args);
 
-      let validatedArgs = cleanArgs;
+        let validatedArgs = cleanArgs;
 
-      // Reattach meta-arguments to validated args if they were provided
-      if (meta.taskProgress !== undefined) {
-        validatedArgs.taskProgress = meta.taskProgress;
+        // Reattach meta-arguments to validated args if they were provided
+        if (meta.taskProgress !== undefined) {
+          validatedArgs.taskProgress = meta.taskProgress;
+        }
+
+        // Process meta-arguments if present
+        // Note: Meta-arguments handling would need to be implemented differently
+        // since we've decoupled from the Agent class
+        if (meta.taskProgress) {
+          console.log(`[META] Task progress update: ${JSON.stringify(meta.taskProgress)}`);
+          // In a fully decoupled implementation, you would either:
+          // 1. Pass a progress callback function in the constructor
+          // 2. Use an event emitter pattern
+          // 3. Implement a separate progress tracking mechanism
+        }
+
+        const result = await handler(validatedArgs);
+
+        // Structured error detection
+        if (this._isToolFailure(result)) {
+          circuitBreaker.recordFailure(signature, 'Tool reported failure');
+        } else {
+          circuitBreaker.recordSuccess(signature);
+        }
+
+        return {
+          role: "tool",
+          content: typeof result === "object" ? JSON.stringify(result) : String(result),
+          toolCallId: toolCall.id
+        };
+      } catch (error) {
+        // Record the failure with the circuit breaker
+        circuitBreaker.recordFailure(signature, `Tool execution error: ${error.message}`);
+
+        // If this is a non-retryable error or we've exhausted retries, return the error
+        if (!this._isRetryableError(error) || retryCount >= maxRetries - 1) {
+          console.error(`Error processing tool call ${toolCall.function.name}:`, error);
+          return {
+            role: "tool",
+            content: JSON.stringify({
+              status: "error",
+              message: error.message,
+              retries: retryCount
+            }),
+            toolCallId: toolCall.id
+          };
+        }
+
+        // Wait with exponential backoff before retrying
+        retryCount++;
+        const delay = Math.pow(2, retryCount) * 100; // Exponential backoff: 200ms, 400ms, 800ms
+        console.warn(`⚠️ Retry ${retryCount}/${maxRetries} for tool ${toolCall.function.name} in ${delay}ms. Error: ${error.message}`);
+
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-
-      // Process meta-arguments if present
-      if (meta.taskProgress) {
-        this.agent._captureProgressIntent({
-          choices: [{
-            message: {
-              toolCalls: [{
-                function: {
-                  name: toolCall.function.name,
-                  arguments: JSON.stringify({ taskProgress: meta.taskProgress })
-                }
-              }]
-            }
-          }]
-        });
-      }
-
-      const result = await handler(validatedArgs);
-
-      // Structured error detection
-      if (this._isToolFailure(result)) {
-        circuitBreaker.recordFailure(signature, 'Tool reported failure');
-      } else {
-        circuitBreaker.recordSuccess(signature);
-      }
-
-      return {
-        role: "tool",
-        content: typeof result === "object" ? JSON.stringify(result) : String(result),
-        toolCallId: toolCall.id
-      };
-    } catch (error) {
-      circuitBreaker.recordFailure(signature, `Tool execution error: ${error.message}`);
-      console.error(`Error processing tool call ${toolCall.function.name}:`, error);
-      return {
-        role: "tool",
-        content: JSON.stringify({ status: "error", message: error.message }),
-        toolCallId: toolCall.id
-      };
     }
+
+    // This line should theoretically never be reached due to the return statements in the catch block
+    return {
+      role: "tool",
+      content: JSON.stringify({
+        status: "error",
+        message: `Tool call failed after ${maxRetries} attempts`
+      }),
+      toolCallId: toolCall.id
+    };
   }
 
   /**
@@ -214,7 +312,7 @@ export class ResponseProcessor {
    * @returns {boolean}
    */
   _hasRoomForNextRound(messages) {
-    const limit = this.agent.contextLimit || 128000;
+    const limit = this.contextLimit || 128000;
     // Use js-tiktoken for accurate token counting (cl100k_base approximation for Mistral)
     const estimatedTokens = countMessageTokens(messages);
     const buffer = 3000; // Buffer for the model's next response
@@ -243,7 +341,7 @@ export class ResponseProcessor {
    * @returns {Promise<{toolResults: Array, allCallsSuccessful: boolean}|null>}
    */
   async _runToolCalls(toolCalls, context = '') {
-    const { circuitBreaker, loopDetector, parallelToolCalls } = this.agent;
+    const { circuitBreaker, loopDetector, parallelToolCalls } = this;
     const suffix = context ? ` in ${context} response` : '';
 
     const toolCallSignatures = toolCalls.map(tc =>
@@ -287,6 +385,231 @@ export class ResponseProcessor {
     }
   }
 
+  /**
+   * Handles structured JSON responses from the API.
+   * Extracts final reply and requested tools, executes tools if needed,
+   * and prepares for the next round or returns the final result.
+   *
+   * @param {Object} assistantMsg - The assistant's message object
+   * @param {Array} currentMessages - Current conversation messages
+   * @param {number} round - Current round number
+   * @param {Object} currentResponse - Current API response
+   * @param {Array} originalMessages - Original messages array
+   * @returns {Promise<Object|null>} - Result object if processing is complete, null otherwise
+   */
+  async _handleStructuredResponse(assistantMsg, currentMessages, round, currentResponse, originalMessages) {
+    // Check if the response is a structured JSON
+    let parsedContent;
+    try {
+      parsedContent = JSON.parse(assistantMsg.content);
+    } catch (e) {
+      // Not a JSON response, proceed with regular flow
+      return null;
+    }
+
+    if (this.debug) console.log(`📊 [REACT LOOP] Round ${round} - Structured response detected`);
+
+    // Extract the final reply and requested tools
+    const finalReply = parsedContent.final_reply;
+    const requestedTools = parsedContent.requested_tools || [];
+
+    // If there are no requested tools, return the final reply
+    if (requestedTools.length === 0) {
+      if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No requested tools, task finished`);
+      return {
+        response: finalReply,
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "success"
+      };
+    }
+
+    // Convert requested tools to tool calls format
+    const toolCalls = requestedTools.map((tool, index) => ({
+      id: `call_${Date.now()}_${index}`,
+      type: "function",
+      function: {
+        name: tool.tool,
+        arguments: JSON.stringify(tool.arguments)
+      }
+    }));
+
+    // Execute tools with circuit breaker
+    const { client, model, loopDetector } = this;
+    const runResult = await this._runToolCalls(toolCalls, 'recursive');
+    if (!runResult) {
+      if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
+      return {
+        response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "blocked"
+      };
+    }
+
+    const { toolResults, allCallsSuccessful } = runResult;
+    currentMessages.push(...toolResults);
+    loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+
+    // Post-execution loop check
+    if (loopDetector.detectToolCallLoop(toolCalls)) {
+      if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
+      return {
+        response: "Loop detected: Agent stopped to prevent infinite recursion.",
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "loopDetected"
+      };
+    }
+
+    // Update progress tracking after tool execution
+    this.updateTaskProgress();
+
+    // Prepare for next round
+    const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+    const nextResponse = await client.chat.complete({
+      model,
+      messages: apiMessages,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "minimal_agent_response_schema",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              action: { type: "string" },
+              data: { type: "object" }
+            },
+            required: ["action"],
+            additionalProperties: false
+          }
+        }
+      }
+    });
+
+    if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
+
+    // Update the currentResponse reference in the caller
+    Object.assign(currentResponse, nextResponse);
+
+    // Return null to indicate we should continue with the next iteration
+    return null;
+  }
+
+  /**
+   * Checks termination conditions for the current round.
+   * Returns a result object if any termination condition is met, otherwise returns null.
+   *
+   * @param {Object} assistantMsg - The assistant's message object
+   * @param {Array} currentMessages - Current conversation messages
+   * @param {number} round - Current round number
+   * @param {number} maxRounds - Maximum allowed rounds
+   * @returns {Object|null} - Result object if termination condition is met, null otherwise
+   */
+  _checkTerminationConditions(assistantMsg, currentMessages, round, maxRounds) {
+    const toolCalls = assistantMsg.toolCalls;
+
+    // Termination condition 1: No tool calls - task completed
+    if (!toolCalls || toolCalls.length === 0) {
+      if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No tool calls, task finished`);
+      return {
+        response: assistantMsg.content,
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "success"
+      };
+    }
+
+    // Termination: Hard Stop on Context
+    if (!this._hasRoomForNextRound(currentMessages)) {
+      return {
+        response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "contextOverflow"
+      };
+    }
+
+    // Termination condition 2: Max rounds reached
+    if (round >= maxRounds) {
+      if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Maximum rounds reached. Task may require manual intervention.`);
+      return {
+        response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "maxRounds"
+      };
+    }
+
+    // No termination condition met, continue processing
+    return null;
+  }
+
+  /**
+   * Executes tool calls and handles the results.
+   *
+   * @param {Array} toolCalls - Array of tool calls to execute
+   * @param {Array} currentMessages - Current conversation messages
+   * @param {number} round - Current round number
+   * @param {Object} loopDetector - Loop detector instance
+   * @returns {Promise<Object|null>} - Result object if processing is complete, null otherwise
+   */
+  async _executeToolsAndUpdateState(toolCalls, currentMessages, round, loopDetector) {
+    // Execute tools with circuit breaker
+    const runResult = await this._runToolCalls(toolCalls, 'recursive');
+    if (!runResult) {
+      if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
+      return {
+        response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "blocked"
+      };
+    }
+
+    const { toolResults, allCallsSuccessful } = runResult;
+    currentMessages.push(...toolResults);
+    loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+
+    // Post-execution loop check
+    if (loopDetector.detectToolCallLoop(toolCalls)) {
+      if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
+      return {
+        response: "Loop detected: Agent stopped to prevent infinite recursion.",
+        fullMessages: currentMessages,
+        rounds: round,
+        status: "loopDetected"
+      };
+    }
+
+    // Update progress tracking after tool execution
+    this.updateTaskProgress();
+
+    return null;
+  }
+
+  /**
+   * Prepares for the next round of processing.
+   *
+   * @param {Array} currentMessages - Current conversation messages
+   * @param {Object} currentResponse - Current API response (will be updated)
+   * @param {number} round - Current round number
+   * @param {Object} client - API client
+   * @param {string} model - Model name
+   * @returns {Promise<void>}
+   */
+  async _prepareForNextRound(currentMessages, currentResponse, round, client, model) {
+    // Prepare for next round
+    const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+    const nextResponse = await client.chat.complete({ model, messages: apiMessages });
+
+    if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
+
+    // Update the currentResponse reference
+    Object.assign(currentResponse, nextResponse);
+  }
+
   // ---------------------------------------------------------------------------
   // processResponse (non-streaming)
   // ---------------------------------------------------------------------------
@@ -297,200 +620,71 @@ export class ResponseProcessor {
    * @param {Array} messages - Conversation messages
    * @returns {Promise<{response: string, fullMessages: Array, rounds: number, status: string}>}
    */
-   async processResponse(response, messages) {
-     let currentResponse = response;
-     let currentMessages = [...messages];
-     let round = 1;
-     const { client, model, loopDetector, maxRounds = 10 } = this.agent;
+  async processResponse(response, messages) {
+    let currentResponse = response;
+    let currentMessages = [...messages];
+    let round = 1;
+    const { client, model, loopDetector, maxRounds = 10 } = this;
 
-     while (round <= maxRounds) {
-       if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} started`);
+    while (round <= maxRounds) {
+      if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} started`);
 
-       const assistantMsg = currentResponse.choices[0].message;
-       currentMessages.push(assistantMsg);
+      const assistantMsg = currentResponse.choices[0].message;
+      currentMessages.push(assistantMsg);
 
-       // Check if the response is a structured JSON
-       let parsedContent;
-       try {
-         parsedContent = JSON.parse(assistantMsg.content);
-       } catch (e) {
-         // Not a JSON response, proceed as usual
-       }
+      // Handle structured or unstructured response
+      const structuredResponseResult = await this._handleStructuredResponse(
+        assistantMsg, currentMessages, round, currentResponse, messages
+      );
 
-       // If it's a structured response, handle it
-       if (parsedContent) {
-         if (this.debug) console.log(`📊 [REACT LOOP] Round ${round} - Structured response detected`);
+      if (structuredResponseResult) {
+        // If we got a result from structured response handling, return it
+        return structuredResponseResult;
+      }
 
-         // Extract the final reply and requested tools
-         const finalReply = parsedContent.final_reply;
-         const requestedTools = parsedContent.requested_tools || [];
+      // Check termination conditions
+      const terminationResult = this._checkTerminationConditions(
+        assistantMsg, currentMessages, round, maxRounds
+      );
 
-         // If there are no requested tools, return the final reply
-         if (requestedTools.length === 0) {
-           if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No requested tools, task finished`);
-           return {
-             response: finalReply,
-             fullMessages: currentMessages,
-             rounds: round,
-             status: "success"
-           };
-         }
+      if (terminationResult) {
+        return terminationResult;
+      }
 
-         // Convert requested tools to tool calls format
-         const toolCalls = requestedTools.map((tool, index) => ({
-           id: `call_${Date.now()}_${index}`,
-           type: "function",
-           function: {
-             name: tool.tool,
-             arguments: JSON.stringify(tool.arguments)
-           }
-         }));
+      const toolCalls = assistantMsg.toolCalls;
 
-         // Execute tools with circuit breaker
-         const runResult = await this._runToolCalls(toolCalls, 'recursive');
-         if (!runResult) {
-           if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
-           return {
-             response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
-             fullMessages: currentMessages,
-             rounds: round,
-             status: "blocked"
-           };
-         }
+      // Execute tools and update state
+      const toolExecutionResult = await this._executeToolsAndUpdateState(
+        toolCalls, currentMessages, round, loopDetector
+      );
 
-         const { toolResults, allCallsSuccessful } = runResult;
-         currentMessages.push(...toolResults);
-         loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
+      if (toolExecutionResult) {
+        return toolExecutionResult;
+      }
 
-         // Post-execution loop check
-         if (loopDetector.detectToolCallLoop(toolCalls)) {
-           if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
-           return {
-             response: "Loop detected: Agent stopped to prevent infinite recursion.",
-             fullMessages: currentMessages,
-             rounds: round,
-             status: "loopDetected"
-           };
-         }
+      // Prepare for next round
+      await this._prepareForNextRound(
+        currentMessages, currentResponse, round, client, model
+      );
 
-         // Update progress tracking after tool execution
-         this.updateTaskProgress();
+      round++;
+    }
 
-        // Prepare for next round
-        const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-        currentResponse = await client.chat.complete({
-          model,
-          messages: apiMessages,
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "minimal_agent_response_schema",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    action: { type: "string" },
-                    data: { type: "object" }
-                  },
-                  required: ["action"],
-                  additionalProperties: false
-                }
-              }
-            }
-        });
-
-         if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
-         round++;
-         continue;
-       }
-
-       // Termination condition 1: No tool calls - task completed
-       const toolCalls = assistantMsg.toolCalls;
-       if (!toolCalls || toolCalls.length === 0) {
-         if (this.debug) console.log(`✅ [REACT LOOP] Round ${round} completed - No tool calls, task finished`);
-         return {
-           response: assistantMsg.content,
-           fullMessages: currentMessages,
-           rounds: round,
-           status: "success"
-         };
-       }
-
-       // Termination: Hard Stop on Context
-       if (!this._hasRoomForNextRound(currentMessages)) {
-         return {
-           response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
-           fullMessages: currentMessages,
-           rounds: round,
-           status: "contextOverflow"
-         };
-       }
-
-       // Termination condition 2: Max rounds reached
-       if (round >= maxRounds) {
-         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Maximum rounds reached. Task may require manual intervention.`);
-         return {
-           response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
-           fullMessages: currentMessages,
-           rounds: round,
-           status: "maxRounds"
-         };
-       }
-
-       // Execute tools with circuit breaker
-       const runResult = await this._runToolCalls(toolCalls, 'recursive');
-       if (!runResult) {
-         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Circuit breaker protection activated`);
-         return {
-           response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
-           fullMessages: currentMessages,
-           rounds: round,
-           status: "blocked"
-         };
-       }
-
-       const { toolResults, allCallsSuccessful } = runResult;
-       currentMessages.push(...toolResults); // Critical Fix: Update history with tool results
-       loopDetector.updateRecentToolCalls(toolCalls, allCallsSuccessful);
-
-       // Post-execution loop check
-       if (loopDetector.detectToolCallLoop(toolCalls)) {
-         if (this.debug) console.warn(`⚠️ [REACT LOOP] Round ${round} - Detected potential tool call loop after tool execution. Forcing termination.`);
-         return {
-           response: "Loop detected: Agent stopped to prevent infinite recursion.",
-           fullMessages: currentMessages,
-           rounds: round,
-           status: "loopDetected"
-         };
-       }
-
-       // Update progress tracking after tool execution
-       this.updateTaskProgress();
-
-       // Prepare for next round
-       const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-       currentResponse = await client.chat.complete({ model, messages: apiMessages });
-
-       if (this.debug) console.log(`🔄 [REACT LOOP] Round ${round} completed - Proceeding to round ${round + 1}`);
-       round++;
-     }
-
-     return {
-       response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
-       fullMessages: currentMessages,
-       rounds: maxRounds,
-           status: "maxRounds"
-     };
-   }
+    return {
+      response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
+      fullMessages: currentMessages,
+      rounds: maxRounds,
+      status: "maxRounds"
+    };
+  }
 
   /**
-   * Update task progress based on Agent's state and check for completion.
+   * Update task progress based on progress state and check for completion.
    * @returns {Object} - Progress update status
    */
   updateTaskProgress() {
-    // The Agent already updated this.agent.progressState via _captureProgressIntent
     // Check if all tasks in the Map are completed
-    const state = this.agent.progressState;
+    const state = this.progressState;
     const allTasksCompleted = state.size > 0 && Array.from(state.values()).every(v => v === true);
 
     return {
@@ -514,7 +708,7 @@ export class ResponseProcessor {
     let currentStream = stream;
     let currentMessages = [...messages];
     let round = 1;
-    const { client, model, loopDetector, maxRounds = 10 } = this.agent;
+    const { client, model, loopDetector, maxRounds = 10 } = this;
 
     while (round <= maxRounds) {
       if (this.debug) console.log(`🔄 [STREAM REACT LOOP] Round ${round} started`);
@@ -620,7 +814,6 @@ export class ResponseProcessor {
         return msg;
       });
 
-
       const nextStream = await client.chat.stream({
         model,
         messages: apiMessages,
@@ -640,12 +833,12 @@ export class ResponseProcessor {
             }
           }
         },
-        ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
+        ...(this.tools.length > 0 && { tools: this.toolManager?.getApiTools() })
       });
-      
+
       // Continue with streaming processing
       const continuation = await this.processStreamResponse(nextStream, apiMessages, onChunk);
-      
+
       return {
         response: continuation.response,
         fullMessages: continuation.fullMessages,

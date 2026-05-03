@@ -1,7 +1,6 @@
 /**
  * Tool Execution Manager
- * Centralizes all tool execution with semantic loop detection, memory integration,
- * and importance scoring for Victor/Sentinel modes
+ * Centralizes all tool execution with semantic loop detection
  */
 import { EventEmitter } from "events";
 
@@ -17,13 +16,7 @@ export class ToolExecutionManager extends EventEmitter {
     this.pineconeClient = null;
     this.semanticLoopThreshold = 0.85; // Similarity threshold for semantic loops
     
-    // Memory integration
-    this.memoryMode = false;
-    this.victorMode = false;
-    this.sentinelMode = false;
-    
     // Progress tracking
-    this.lightweightMode = false;
     
     // Importance scoring
     this.importanceThreshold = 7; // Minimum importance score for memory commit
@@ -101,20 +94,6 @@ export class ToolExecutionManager extends EventEmitter {
     });
   }
 
-  /**
-   * Set agent mode and configure manager accordingly
-   * @param {string} mode - 'victor', 'sentinel', or 'standard'
-   */
-  setMode(mode) {
-    this.victorMode = mode === 'victor';
-    this.sentinelMode = mode === 'sentinel';
-    this.memoryMode = this.victorMode || this.sentinelMode;
-    this.lightweightMode = this.victorMode;
-    
-    if (this.debug) {
-      console.log(`🔧 [TOOL MANAGER] Mode set to: ${mode}`);
-    }
-  }
 
   /**
    * Execute a single tool call with enhanced error handling and memory integration
@@ -157,10 +136,6 @@ export class ToolExecutionManager extends EventEmitter {
         throw new Error(`Handler for "${name}" not found`);
       }
 
-      // Memory integration: Record structured thought before execution
-      if (this.memoryMode) {
-        await this._recordExecutionThought(name, validatedArgs, 'beforeExecution');
-      }
 
       const result = await handler(validatedArgs, { 
         agent: this.agent, 
@@ -178,10 +153,6 @@ export class ToolExecutionManager extends EventEmitter {
         ts: new Date() 
       });
 
-      // Memory integration: Record structured thought after execution
-      if (this.memoryMode) {
-        await this._recordExecutionThought(name, validatedArgs, 'afterExecution', result, duration);
-      }
 
       if (this.enableEvents) {
         this.emit("tool-metrics", { tool: name, duration, success: true });
@@ -238,10 +209,6 @@ export class ToolExecutionManager extends EventEmitter {
 
     console.error(`Tool Error [${toolCall.function.name}]:`, error.message);
 
-    // Memory integration: Record error insight
-    if (this.memoryMode) {
-      await this._recordErrorInsight(toolCall.function.name, error, retryCount);
-    }
 
     return {
       role: "tool",
@@ -268,10 +235,6 @@ export class ToolExecutionManager extends EventEmitter {
         console.warn(`⚠️ [SEMANTIC LOOP] Semantic loop detected for tools: ${semanticLoopResult.tools.join(', ')}`);
       }
       
-      // Memory integration: Record semantic loop insight
-      if (this.memoryMode) {
-        await this._recordSemanticLoopInsight(semanticLoopResult);
-      }
       
       return { toolResults: [], allCallsSuccessful: false };
     }
@@ -533,152 +496,6 @@ export class ToolExecutionManager extends EventEmitter {
     }
   }
 
-  /**
-   * Record structured thought before/after tool execution
-   * @param {string} toolName - Name of the tool
-   * @param {Object} args - Tool arguments
-   * @param {string} phase - Execution phase ('beforeExecution' or 'afterExecution')
-   * @param {Object} [result] - Tool result (for afterExecution)
-   * @param {number} [duration] - Execution duration (for afterExecution)
-   * @private
-   */
-  async _recordExecutionThought(toolName, args, phase, result, duration) {
-    try {
-      const thought = {
-        content: this._generateThoughtContent(toolName, args, phase, result, duration),
-        type: 'executionThought',
-        mode: this.victorMode ? 'victor' : 'sentinel',
-        metadata: {
-          toolName,
-          phase,
-          duration,
-          success: !this._isToolFailure({ content: JSON.stringify(result) }),
-          timestamp: Date.now()
-        }
-      };
-
-      if (this.debug) {
-        console.log(`💭 [THOUGHT] Recording execution thought:`, thought);
-      }
-
-      // Use recordThought tool to record the thought
-      if (this.agent.handlers?.recordThought) {
-        await this.agent.handlers.recordThought(thought);
-      }
-
-      this.emit('execution-thought-recorded', thought);
-    } catch (error) {
-      console.warn('Failed to record execution thought:', error);
-    }
-  }
-
-  /**
-   * Generate thought content for tool execution
-   * @param {string} toolName - Name of the tool
-   * @param {Object} args - Tool arguments
-   * @param {string} phase - Execution phase
-   * @param {Object} [result] - Tool result
-   * @param {number} [duration] - Execution duration
-   * @returns {string} - Generated thought content
-   * @private
-   */
-  _generateThoughtContent(toolName, args, phase, result, duration) {
-    if (phase === 'before_execution') {
-      return `Preparing to execute tool "${toolName}" with arguments: ${JSON.stringify(args)}`;
-    } else {
-      const success = !this._isToolFailure({ content: JSON.stringify(result) });
-      return `Completed tool "${toolName}" execution. Success: ${success}. Duration: ${duration}ms. Result: ${JSON.stringify(result)}`;
-    }
-  }
-
-  /**
-   * Record error insight for failed tool execution
-   * @param {string} toolName - Name of the failed tool
-   * @param {Error} error - Error object
-   * @param {number} retryCount - Number of retries attempted
-   * @private
-   */
-  async _recordErrorInsight(toolName, error, retryCount) {
-    try {
-      const insight = {
-        content: `Tool "${toolName}" failed after ${retryCount + 1} attempts. Error: ${error.message}`,
-        type: 'errorInsight',
-        importance: this._calculateErrorImportance(error, retryCount),
-        metadata: {
-          toolName,
-          errorType: error.constructor.name,
-          retryCount,
-          timestamp: Date.now()
-        }
-      };
-
-      if (this.debug) {
-        console.log(`🧠 [MEMORY] Recording error insight:`, insight);
-      }
-
-      // Use recordThought tool to record the insight
-      if (this.agent.handlers?.recordThought) {
-        await this.agent.handlers.recordThought(insight);
-      }
-
-      this.emit('error-insight-recorded', insight);
-    } catch (error) {
-      console.warn('Failed to record error insight:', error);
-    }
-  }
-
-  /**
-   * Record semantic loop detection insight
-   * @param {Object} loopResult - Semantic loop detection result
-   * @private
-   */
-  async _recordSemanticLoopInsight(loopResult) {
-    try {
-      const insight = {
-        content: `Semantic loop detected for tools: ${loopResult.tools.join(', ')}. Preventing infinite recursion.`,
-        type: 'semanticLoopInsight',
-        importance: 9, // High importance
-        metadata: {
-          tools: loopResult.tools,
-          timestamp: Date.now()
-        }
-      };
-
-      if (this.debug) {
-        console.log(`🧠 [MEMORY] Recording semantic loop insight:`, insight);
-      }
-
-      // Use recordThought tool to record the insight
-      if (this.agent.handlers?.recordThought) {
-        await this.agent.handlers.recordThought(insight);
-      }
-
-      this.emit('semantic-loop-insight-recorded', insight);
-    } catch (error) {
-      console.warn('Failed to record semantic loop insight:', error);
-    }
-  }
-
-  /**
-   * Calculate importance score for errors
-   * @param {Error} error - Error object
-   * @param {number} retryCount - Number of retries attempted
-   * @returns {number} - Importance score (1-10)
-   * @private
-   */
-  _calculateErrorImportance(error, retryCount) {
-    let score = 3; // Base score
-
-    // Increase score for retriable errors
-    if (error.message?.includes("rate limit")) score += 2;
-    if (error.code === "ETIMEDOUT") score += 2;
-
-    // Increase score for multiple retries
-    if (retryCount > 0) score += retryCount;
-
-    // Cap at 10
-    return Math.min(score, 10);
-  }
 
   /**
    * Check if a tool result represents a failure

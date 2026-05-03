@@ -14,7 +14,7 @@ dotenv.config();
 const SYSTEM_PROMPT = fs.readFileSync('./src/docs/persona-4.md', 'utf8');
 
 async function main() {
-  console.log('🤖 AUTOBOT Chat Interface v5.0 - ENHANCED STREAMING WITH VICTOR/SENTINEL MODES');
+console.log('🤖 AUTOBOT Chat Interface v5.0 - ENHANCED STREAMING');
   console.log('===========================================================================\n');
 
   // Initialize agent with MongoDB storage and tools including thought tool
@@ -144,7 +144,7 @@ async function main() {
       console.log(`   Events Enabled: ${agent.enableEvents ? 'ENABLED' : 'DISABLED'}`);
       console.log(`   Enhanced Streaming: ACTIVE (using StreamingResponseProcessor)`);
       console.log(`   Semantic Loop Detection: ACTIVE (using ToolExecutionManager)`);
-      console.log(`   Memory Integration: ACTIVE (Victor/Sentinel modes available)`);
+      console.log(`   Memory Integration: ACTIVE`);
       rl.prompt();
       return;
     }
@@ -232,7 +232,6 @@ function printHelp() {
   console.log('\n🚀 ENHANCED FEATURES:');
   console.log('   ✅ Unified streaming with memory integration');
   console.log('   ✅ Semantic loop detection via Pinecone');
-  console.log('   ✅ Victor/Sentinel mode support');
   console.log('   ✅ Lightweight progress tracking');
   console.log('   ✅ Structured thought recording');
   console.log('   ✅ Atomic progress state merging');
