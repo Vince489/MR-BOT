@@ -5,7 +5,7 @@
   "main": "Agent.js",
   "scripts": {
     "start": "node src/scripts/chat-5",
-    "start:6": "node src/scripts/chat-6"
+    "start6": "node src/scripts/chat-6"
   },
   "keywords": [],
   "author": "",
