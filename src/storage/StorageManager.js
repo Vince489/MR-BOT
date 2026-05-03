@@ -62,10 +62,6 @@ class StorageManager {
     }
 
     this.initialized = true;
-
-    // Load initial history
-    const history = await this.loadHistory();
-    return history;
   }
 
   /**

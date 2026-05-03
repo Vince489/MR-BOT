@@ -219,34 +219,8 @@ console.log('🤖 AUTOBOT Chat Interface v5.0 - ENHANCED STREAMING');
   });
 }
 
+// Empty printHelp function as requested
 function printHelp() {
-  console.log('\n📖 Commands:');
-  console.log('   /help     - Show this help message');
-  console.log('   /clear    - Clear chat history from MongoDB');
-  console.log('   /history  - Show history statistics');
-  console.log('   /status   - Show MongoDB connection status');
-  console.log('   /progress - Show current progress tracking');
-  console.log('   /mode     - Show agent configuration and enhanced features');
-  console.log('   /new      - Start new conversation (keeps saved history)');
-  console.log('   /quit     - Exit the chat');
-  console.log('\n🚀 ENHANCED FEATURES:');
-  console.log('   ✅ Unified streaming with memory integration');
-  console.log('   ✅ Semantic loop detection via Pinecone');
-  console.log('   ✅ Lightweight progress tracking');
-  console.log('   ✅ Structured thought recording');
-  console.log('   ✅ Atomic progress state merging');
-  console.log('   ✅ Chat history search tool (semantic search across conversations)');
-  console.log('\n💡 IMPORTANT: This interface enforces mandatory thought process.');
-  console.log('   The AI is now constrained by a JSON schema to record its thoughts before responding.');
-  console.log('   This ensures systematic, well-reasoned responses and guarantees thoughts are saved to the database.\n');
-  console.log('🔍 CHAT HISTORY SEARCH:');
-  console.log('   The agent has access to a powerful search tool that can:');
-  console.log('   • Find messages by keywords or topics');
-  console.log('   • Search across all your conversation history');
-  console.log('   • Use semantic search to find related content');
-  console.log('   • Filter by session, role, or date range');
-  console.log('   • Retrieve conversation context around specific messages');
-  console.log('   Simply ask the agent to search your chat history for specific topics!');
 }
 
 main().catch(error => {
