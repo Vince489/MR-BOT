@@ -1,0 +1,17 @@
+{
+  "name": "bot-2026",
+  "version": "1.0.0",
+  "description": "",
+  "main": "Agent.js",
+  "scripts": {
+    "start": "node --env-file=.env chat.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@mistralai/mistralai": "^2.2.1",
+    "mongoose": "^9.6.1"
+  }
+}

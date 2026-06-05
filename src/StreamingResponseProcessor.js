@@ -20,6 +20,9 @@ export class StreamingResponseProcessor extends EventEmitter {
 
     // API message sanitization helper to prevent invalid role payloads
     this.validRoles = new Set(['system', 'user', 'assistant', 'tool']);
+
+    // Track if thinking has occurred in this conversation
+    this.thinkingOccurred = false;
   }
 
   _normalizeToolCall(tc) {
@@ -57,7 +60,6 @@ export class StreamingResponseProcessor extends EventEmitter {
     }).filter(Boolean);
   }
 
-
   /**
    * Process streaming API response with unified logic
    * @param {Object} stream - Streaming response from Mistral client
@@ -69,6 +71,9 @@ export class StreamingResponseProcessor extends EventEmitter {
     if (this.debug) {
       console.log(`🔄 [PROCESSOR] Starting stream processing`);
     }
+
+    // Reset thinking tracking for new conversation
+    this.thinkingOccurred = false;
 
     let currentStream = stream;
     let currentMessages = [...messages];
@@ -124,6 +129,14 @@ export class StreamingResponseProcessor extends EventEmitter {
         assistantMessage.toolCalls = accumulated;
         // Keep tool-call assistant messages API-compliant
         assistantMessage.content = assistantMessage.content || "";
+
+        // Check if thought tool was used
+        for (const toolCall of accumulated) {
+          if (toolCall.function.name === "recordThought") {
+            this.thinkingOccurred = true;
+            break;
+          }
+        }
       } else {
         delete assistantMessage.toolCalls;
       }
@@ -169,7 +182,6 @@ export class StreamingResponseProcessor extends EventEmitter {
         if (requestedTools.length === 0) {
           if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No requested tools, task finished`);
 
-
           return {
             response: finalReply,
             fullMessages: currentMessages,
@@ -206,7 +218,6 @@ export class StreamingResponseProcessor extends EventEmitter {
         if (!runResult) {
           if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Circuit breaker protection activated`);
 
-
           return {
             response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
             fullMessages: currentMessages,
@@ -222,7 +233,6 @@ export class StreamingResponseProcessor extends EventEmitter {
         // Post-execution loop check
         if (this.agent.loopDetector.detectToolCallLoop(toolCalls)) {
           if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
-
 
           return {
             response: "Loop detected: Agent stopped to prevent infinite recursion.",
@@ -248,10 +258,31 @@ export class StreamingResponseProcessor extends EventEmitter {
         continue;
       }
 
-      // Termination 1: Success - No tool calls
+      // Termination 1: Success - but only if we have no tools available OR thinking has occurred
       if (!assistantMessage.toolCalls || assistantMessage.toolCalls.length === 0) {
-        if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No tool calls, task finished`);
+        // If tools are available and no thinking has occurred yet, enforce tool usage
+        if (this.agent.tools && this.agent.tools.length > 0 && !this.thinkingOccurred) {
+          if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Direct response attempted without thinking. Enforcing thought tool usage.`);
 
+          // Add a system message to guide the AI to use the thought tool
+          currentMessages.push({
+            role: "system",
+            content: "You must use the thought tool to record your thinking before providing any direct response. This ensures proper reasoning and transparency."
+          });
+
+          // Prepare for next round with tools
+          const apiMessages = this._sanitizeMessagesForApi(currentMessages);
+          currentStream = await this.agent.client.chat.stream({
+            model: this.agent.model,
+            messages: apiMessages,
+            tools: this.agent.toolManager.getApiTools()
+          });
+
+          if (this.debug) console.log(`🔄 [STREAM LOOP] Round ${round} enforcing thought tool usage - Proceeding to round ${round + 1}`);
+          round++;
+          continue;
+        }
+        if (this.debug) console.log(`✅ [STREAM LOOP] Round ${round} completed - No tool calls, task finished`);
 
         return {
           response: assistantMessage.content,
@@ -264,26 +295,24 @@ export class StreamingResponseProcessor extends EventEmitter {
       // Termination 2: Hard Stop - Context limit
       if (!this._hasRoomForNextRound(currentMessages)) {
         if (this.debug) console.warn(`🛑 [STREAM LOOP] Round ${round} - Context limit reached`);
-        
-        
-        return { 
-          response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.", 
-          fullMessages: currentMessages, 
-          rounds: round, 
-          status: "contextOverflow" 
+
+        return {
+          response: "I have reached my context limit and stopped to prevent memory loss. Please start a new thread.",
+          fullMessages: currentMessages,
+          rounds: round,
+          status: "contextOverflow"
         };
       }
 
       // Termination 3: Max rounds reached
       if (round >= maxRounds) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Maximum rounds reached`);
-        
-        
-        return { 
-          response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`, 
-          fullMessages: currentMessages, 
-          rounds: round, 
-          status: "maxRounds" 
+
+        return {
+          response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
+          fullMessages: currentMessages,
+          rounds: round,
+          status: "maxRounds"
         };
       }
 
@@ -304,13 +333,12 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       if (!runResult) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Circuit breaker protection activated`);
-        
-        
-        return { 
-          response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.", 
-          fullMessages: currentMessages, 
-          rounds: round, 
-          status: "blocked" 
+
+        return {
+          response: "Circuit breaker protection activated: Some tools are temporarily unavailable due to repeated failures. Please refine your prompt.",
+          fullMessages: currentMessages,
+          rounds: round,
+          status: "blocked"
         };
       }
 
@@ -321,13 +349,12 @@ export class StreamingResponseProcessor extends EventEmitter {
       // Post-execution loop check
       if (loopDetector.detectToolCallLoop(assistantMessage.toolCalls)) {
         if (this.debug) console.warn(`⚠️ [STREAM LOOP] Round ${round} - Detected potential tool call loop after tool execution`);
-        
-        
-        return { 
-          response: "Loop detected: Agent stopped to prevent infinite recursion.", 
-          fullMessages: currentMessages, 
-          rounds: round, 
-          status: "loopDetected" 
+
+        return {
+          response: "Loop detected: Agent stopped to prevent infinite recursion.",
+          fullMessages: currentMessages,
+          rounds: round,
+          status: "loopDetected"
         };
       }
 
@@ -336,8 +363,8 @@ export class StreamingResponseProcessor extends EventEmitter {
 
       // Prepare for next round - sanitize messages for API compliance
       const apiMessages = this._sanitizeMessagesForApi(currentMessages);
-      currentStream = await client.chat.stream({
-        model,
+      currentStream = await this.agent.client.chat.stream({
+        model: this.agent.model,
         messages: apiMessages,
         ...(this.agent.tools.length > 0 && { tools: this.agent.toolManager.getApiTools() })
       });
@@ -346,16 +373,13 @@ export class StreamingResponseProcessor extends EventEmitter {
       round++;
     }
 
-    
-    return { 
-      response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`, 
-      fullMessages: currentMessages, 
-      rounds: maxRounds, 
-      status: "maxRounds" 
+    return {
+      response: `Maximum rounds (${maxRounds}) reached. Task may require manual intervention.`,
+      fullMessages: currentMessages,
+      rounds: maxRounds,
+      status: "maxRounds"
     };
   }
-
-
 
   /**
    * Parse progress from tool calls with lightweight mode support

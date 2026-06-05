@@ -1,0 +1,96 @@
+[{
+  "_id": {
+    "$oid": "69fb4d4e8a05bf975f277882"
+  },
+  "sessionId": "session_1778077002646_hymqs68sn",
+  "role": "user",
+  "content": "hello",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:16:46.267Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:16:46.267Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4d4e8a05bf975f277883"
+  },
+  "sessionId": "session_1778077002646_hymqs68sn",
+  "role": "assistant",
+  "content": "Hello! How can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:16:46.276Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:16:46.276Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4d598a05bf975f277884"
+  },
+  "sessionId": "session_1778077002646_hymqs68sn",
+  "role": "user",
+  "content": "open www.google.com",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:16:57.910Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:16:57.910Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4d598a05bf975f277885"
+  },
+  "sessionId": "session_1778077002646_hymqs68sn",
+  "role": "assistant",
+  "content": "The website is now open in your default browser. Is there anything else I can assist you with?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:16:57.917Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:16:57.917Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4d6d8a05bf975f277886"
+  },
+  "sessionId": "session_1778077002646_hymqs68sn",
+  "role": "user",
+  "content": "no that is all thank you",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:17:17.702Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:17:17.702Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4d6d8a05bf975f277887"
+  },
+  "sessionId": "session_1778077002646_hymqs68sn",
+  "role": "assistant",
+  "content": "You're welcome! If you need any further assistance, feel free to ask. Have a great day!",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:17:17.708Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:17:17.708Z"
+  },
+  "__v": 0
+}]

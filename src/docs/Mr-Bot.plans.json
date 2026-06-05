@@ -1,0 +1,276 @@
+[{
+  "_id": {
+    "$oid": "69f7fdde362e4f63407b585a"
+  },
+  "planId": "plan_1777860062380_xdde",
+  "title": "Test Plan for PlanningTool.js",
+  "description": "A plan to test the new dependency validation and concurrency control features",
+  "steps": [
+    {
+      "stepId": "step_1",
+      "title": "Create initial test data",
+      "tool": "recordThought",
+      "dependencies": [],
+      "requiredArtifact": {
+        "artifactType": "JSON",
+        "validationCriteria": "Must contain test data in specified format",
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b585c"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Failed to create test data",
+        "recoverySteps": [
+          "step_1"
+        ],
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b585d"
+        }
+      },
+      "status": "not_started",
+      "startedAt": null,
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f7fdde362e4f63407b585b"
+      }
+    },
+    {
+      "stepId": "step_2",
+      "title": "Process test data",
+      "tool": "recordThought",
+      "dependencies": [
+        "step_1"
+      ],
+      "requiredArtifact": {
+        "artifactType": "JSON",
+        "validationCriteria": "Must show successful processing of all input data",
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b585f"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Data processing failed",
+        "recoverySteps": [
+          "step_1",
+          "step_2"
+        ],
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b5860"
+        }
+      },
+      "status": "not_started",
+      "startedAt": null,
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f7fdde362e4f63407b585e"
+      }
+    },
+    {
+      "stepId": "step_3",
+      "title": "Validate processed data",
+      "tool": "recordThought",
+      "dependencies": [
+        "step_2"
+      ],
+      "requiredArtifact": {
+        "artifactType": "JSON",
+        "validationCriteria": "Must confirm data meets all quality criteria",
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b5862"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Data validation failed",
+        "recoverySteps": [
+          "step_2",
+          "step_3"
+        ],
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b5863"
+        }
+      },
+      "status": "not_started",
+      "startedAt": null,
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f7fdde362e4f63407b5861"
+      }
+    },
+    {
+      "stepId": "step_4",
+      "title": "Generate test report",
+      "tool": "recordThought",
+      "dependencies": [
+        "step_3"
+      ],
+      "requiredArtifact": {
+        "artifactType": "TEXT",
+        "validationCriteria": "Must summarize all test results and findings",
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b5865"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Report generation failed",
+        "recoverySteps": [
+          "step_3",
+          "step_4"
+        ],
+        "_id": {
+          "$oid": "69f7fdde362e4f63407b5866"
+        }
+      },
+      "status": "not_started",
+      "startedAt": null,
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f7fdde362e4f63407b5864"
+      }
+    }
+  ],
+  "currentStep": "",
+  "status": "not_started",
+  "sessionId": "69b1229049c08b5a9b43e132",
+  "createdAt": {
+    "$date": "2026-05-04T02:01:02.380Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-04T02:01:02.385Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69f80205eeb3f9dfbc98f37c"
+  },
+  "planId": "plan_1777861125717_7ign",
+  "title": "Test Plan for PlanningTool.js",
+  "description": "This plan tests the updated dependency validation and concurrency control in PlanningTool.js",
+  "steps": [
+    {
+      "stepId": "create_test_data_step",
+      "title": "Create Test Data",
+      "description": "Create test data for the plan",
+      "tool": "recordThought",
+      "dependencies": [],
+      "requiredArtifact": {
+        "artifactType": "JSON",
+        "validationCriteria": "Test data must be valid JSON",
+        "validationTool": "recordThought",
+        "_id": {
+          "$oid": "69f80205eeb3f9dfbc98f37e"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Failed to create test data",
+        "recoverySteps": [],
+        "_id": {
+          "$oid": "69f80205eeb3f9dfbc98f37f"
+        }
+      },
+      "status": "in_progress",
+      "startedAt": {
+        "$date": "2026-05-04T02:19:05.021Z"
+      },
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f80205eeb3f9dfbc98f37d"
+      }
+    },
+    {
+      "stepId": "process_test_data_step",
+      "title": "Process Test Data",
+      "description": "Process the test data created in step 1",
+      "tool": "recordThought",
+      "dependencies": [
+        "create_test_data_step"
+      ],
+      "requiredArtifact": {
+        "artifactType": "JSON",
+        "validationCriteria": "Processed data must include all fields from test data",
+        "validationTool": "recordThought",
+        "_id": {
+          "$oid": "69f80205eeb3f9dfbc98f381"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Failed to process test data",
+        "recoverySteps": [
+          "create_test_data_step"
+        ],
+        "_id": {
+          "$oid": "69f80205eeb3f9dfbc98f382"
+        }
+      },
+      "status": "not_started",
+      "startedAt": null,
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f80205eeb3f9dfbc98f380"
+      }
+    },
+    {
+      "stepId": "validate_results_step",
+      "title": "Validate Results",
+      "description": "Validate the results from step 2",
+      "tool": "recordThought",
+      "dependencies": [
+        "process_test_data_step"
+      ],
+      "requiredArtifact": {
+        "artifactType": "JSON",
+        "validationCriteria": "Validation results must confirm all test criteria",
+        "validationTool": "recordThought",
+        "_id": {
+          "$oid": "69f80205eeb3f9dfbc98f384"
+        }
+      },
+      "fallback": {
+        "action": "retry",
+        "message": "Validation failed",
+        "recoverySteps": [
+          "process_test_data_step"
+        ],
+        "_id": {
+          "$oid": "69f80205eeb3f9dfbc98f385"
+        }
+      },
+      "status": "not_started",
+      "startedAt": null,
+      "completedAt": null,
+      "artifact": null,
+      "validationResult": null,
+      "_id": {
+        "$oid": "69f80205eeb3f9dfbc98f383"
+      }
+    }
+  ],
+  "currentStep": "create_test_data_step",
+  "status": "not_started",
+  "sessionId": "69b1229049c08b5a9b43e132",
+  "createdAt": {
+    "$date": "2026-05-04T02:18:45.717Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-04T02:19:05.023Z"
+  },
+  "__v": 0
+}]

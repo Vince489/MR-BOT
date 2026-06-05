@@ -1,0 +1,308 @@
+[{
+  "_id": {
+    "$oid": "69fa0e7ba88b0da0f5fa089e"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "user",
+  "content": "hello",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:36:27.565Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:36:27.565Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0e7ca88b0da0f5fa089f"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "assistant",
+  "content": "Hello! How can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:36:28.280Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:36:28.280Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0e87a88b0da0f5fa08a0"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "user",
+  "content": "pls open www.google.com",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:36:39.258Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:36:39.258Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0e87a88b0da0f5fa08a1"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "assistant",
+  "content": "",
+  "toolCalls": [
+    {
+      "id": "Hn47LQ5cU",
+      "type": "function",
+      "function": {
+        "name": "browserTool",
+        "arguments": "{\"target\": \"https://www.google.com\"}"
+      }
+    }
+  ],
+  "createdAt": {
+    "$date": "2026-05-05T15:36:39.970Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:36:39.970Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0e87a88b0da0f5fa08a2"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "tool",
+  "content": "{\"success\":true,\"message\":\"Opened https://www.google.com in the default browser.\"}",
+  "toolCalls": [],
+  "toolCallId": "Hn47LQ5cU",
+  "createdAt": {
+    "$date": "2026-05-05T15:36:39.993Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:36:39.993Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0e89a88b0da0f5fa08a3"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "assistant",
+  "content": "The website https://www.google.com has been opened in your default browser. Is there anything else you need help with?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:36:41.304Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:36:41.304Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0eaca88b0da0f5fa08a4"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "user",
+  "content": "thank you",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:37:16.810Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:37:16.810Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0eaea88b0da0f5fa08a5"
+  },
+  "sessionId": "session_1777995384682_bk098e5l6",
+  "role": "assistant",
+  "content": "You're welcome! If you need any further assistance, feel free to ask. Have a great day!",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:37:18.455Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:37:18.455Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15c32099e8cabb1aada5"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "user",
+  "content": "hello",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:07:31.958Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:07:31.958Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15c42099e8cabb1aada6"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "assistant",
+  "content": "Hello! How can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:07:32.965Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:07:32.965Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15cb2099e8cabb1aada7"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "user",
+  "content": "who are you",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:07:39.186Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:07:39.186Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15cc2099e8cabb1aada8"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "assistant",
+  "content": "I'm an assistant designed to help you with various tasks. I can provide information, answer questions, and assist with things like opening websites in your browser. How can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:07:40.379Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:07:40.379Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15dd2099e8cabb1aada9"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "user",
+  "content": "cool. do u hav any external tools",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:07:57.657Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:07:57.657Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15df2099e8cabb1aadaa"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "assistant",
+  "content": "Yes, I have a tool that allows me to open URLs or local files in your default browser. This can be useful if you want to visit a website or open a local HTML file. If you have a specific URL or file you'd like me to open, just let me know!",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:07:59.223Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:07:59.223Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15f42099e8cabb1aadab"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "user",
+  "content": "open www.virtron.cc",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:08:20.324Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:08:20.324Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15f52099e8cabb1aadac"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "assistant",
+  "content": "",
+  "toolCalls": [
+    {
+      "id": "EmLmEps2m",
+      "type": "function",
+      "function": {
+        "name": "browserTool",
+        "arguments": "{\"target\": \"https://www.virtron.cc\"}"
+      }
+    }
+  ],
+  "createdAt": {
+    "$date": "2026-05-05T16:08:21.447Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:08:21.447Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15f52099e8cabb1aadad"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "tool",
+  "content": "{\"success\":true,\"message\":\"Opened https://www.virtron.cc in the default browser.\"}",
+  "toolCalls": [],
+  "toolCallId": "EmLmEps2m",
+  "createdAt": {
+    "$date": "2026-05-05T16:08:21.497Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:08:21.497Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa15f62099e8cabb1aadae"
+  },
+  "sessionId": "session_1777997248643_pjknjz0ri",
+  "role": "assistant",
+  "content": "The website https://www.virtron.cc has been opened in your default browser. Is there anything else I can assist you with?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T16:08:22.601Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T16:08:22.601Z"
+  },
+  "__v": 0
+}]

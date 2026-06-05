@@ -57,7 +57,7 @@ function sanitizeFilters(filters) {
 
   const forbiddenKeys = [
     'password', 'hash', 'salt', 'secret', 'token', 'key',
-    '__v', '_id', 'session', 'user', 'createdAt', 'updatedAt'
+    '__v', '_id', 'user', 'createdAt', 'updatedAt'
   ];
 
   const sanitizedFilters = { ...filters };
@@ -89,6 +89,12 @@ async function parseTimeExpression(expression) {
       return null;
     }
 
+    // Ensure the result is an ISO 8601 string
+    if (typeof result !== 'string' || !result.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+      console.warn(`Time expression parsing did not return a valid ISO 8601 string: ${result}`);
+      return null;
+    }
+
     const parsedDate = new Date(result);
     return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
   } catch (error) {
@@ -100,7 +106,7 @@ async function parseTimeExpression(expression) {
 /**
  * Builds MongoDB query for time-based filtering
  */
-async function buildTimeQuery(field, params) {
+async function buildTimeQuery(field, params, context) {
   const query = {};
 
   if (params.after) {
@@ -131,28 +137,24 @@ async function buildTimeQuery(field, params) {
       unit = 'hours';
     }
 
-    const now = new Date();
-    const pastDate = new Date();
-    switch (unit) {
-      case 'year':
-        pastDate.setFullYear(now.getFullYear() - amount);
-        break;
-      case 'month':
-        pastDate.setMonth(now.getMonth() - amount);
-        break;
-      case 'week':
-        pastDate.setDate(now.getDate() - (amount * 7));
-        break;
-      case 'day':
-        pastDate.setDate(now.getDate() - amount);
-        break;
-      case 'hour':
-      default:
-        pastDate.setHours(now.getHours() - amount);
-        break;
-    }
+    // Use dateTimeTool for time calculations
+    const timezone = context?.timezone || 'America/New_York';
+    const result = await dateTimeTool.handler({
+      action: 'subtractTimeFromDateTime',
+      dateTimeStr: new Date().toISOString(),
+      amount: amount,
+      unit: unit,
+      timezone: timezone
+    });
 
-    query[field] = { ...query[field], $gte: pastDate };
+    if (typeof result === 'string' && result.startsWith('Error:')) {
+      console.warn(`Time calculation failed: ${result}`);
+    } else {
+      const pastDate = new Date(result);
+      if (!Number.isNaN(pastDate.getTime())) {
+        query[field] = { ...query[field], $gte: pastDate };
+      }
+    }
   }
 
   return query;
@@ -161,7 +163,7 @@ async function buildTimeQuery(field, params) {
 /**
  * Searches messages with comprehensive filtering
  */
-async function searchMessages(params) {
+async function searchMessages(params, context = {}) {
   try {
     const { sessionId, session, ...searchParams } = params;
     let resolvedSessionId = null;
@@ -187,17 +189,26 @@ async function searchMessages(params) {
 
     // Add time filtering
     if (searchParams.after || searchParams.before || searchParams.last) {
-      const timeQuery = await buildTimeQuery('createdAt', searchParams);
+      const timeQuery = await buildTimeQuery('createdAt', searchParams, context);
       Object.assign(query, timeQuery);
     }
 
-    // Add text search if provided (with fallback if no text index)
+    // Add text search if provided (with explicit check for search type)
     if (searchParams.query) {
-      try {
-        query.$text = { $search: searchParams.query };
-      } catch (error) {
+      // Check if the query is an exact match or keyword search
+      if (searchParams.query.startsWith('"') && searchParams.query.endsWith('"')) {
+        // Exact match: remove quotes and use regex for exact match
+        const exactQuery = searchParams.query.slice(1, -1);
+        query.content = { $regex: `^${exactQuery}$`, $options: 'i' };
+      } else {
+        // Keyword search: use $text if available, otherwise regex
+        try {
+          query.$text = { $search: searchParams.query };
+        } catch (error) {
         // If text search fails, fall back to regex search
-        query.content = { $regex: searchParams.query, $options: 'i' };
+        const escapedQuery = searchParams.query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        query.content = { $regex: escapedQuery, $options: 'i' };
+        }
       }
     }
 
@@ -263,26 +274,13 @@ async function listSessions(params = {}) {
     const limit = params.limit || 20;
     const skip = params.skip || 0;
 
-    const sessions = await Session.aggregate([
-      { $sort: { lastActivity: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from: 'messages',
-          localField: '_id',
-          foreignField: 'session',
-          as: 'messages'
-        }
-      },
-      {
-        $addFields: {
-          messageCount: { $size: '$messages' },
-          lastMessage: { $arrayElemAt: ['$messages.createdAt', -1] }
-        }
-      },
-      { $project: { messages: 0 } }
-    ]);
+    const sessions = await Session.find()
+      .sort({ lastActivity: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const totalSessions = await Session.countDocuments();
 
     const formattedSessions = sessions.map((session) => ({
       sessionId: session.sessionId,
@@ -295,12 +293,12 @@ async function listSessions(params = {}) {
 
     return {
       type: 'sessionList',
-      totalSessions: formattedSessions.length,
+      totalSessions: totalSessions,
       sessions: formattedSessions,
       pagination: {
         limit,
         skip,
-        hasMore: formattedSessions.length === limit
+        hasMore: skip + formattedSessions.length < totalSessions
       },
       metadata: {
         executedAt: new Date().toISOString()
@@ -480,7 +478,7 @@ async function handleDbSearch(params, context = {}) {
 
     switch (action) {
       case 'searchMessages':
-        return searchMessages(restParams);
+        return searchMessages(restParams, context);
 
       case 'listSessions':
         return listSessions(restParams);

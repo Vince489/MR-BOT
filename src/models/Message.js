@@ -4,8 +4,7 @@ const Schema = mongoose.Schema;
 
 /**
  * THE MESSAGE SCHEMA
- * Designed for Mistral/OpenAI compatibility.
- * Links to a 'Session' document to group conversations.
+ * Designed for Mistral
  * Enhanced with vector search capabilities using 1024-dimensional embeddings.
  */
 const messageSchema = new Schema({
@@ -28,17 +27,14 @@ const messageSchema = new Schema({
     default: "" 
   }, 
   // --- VECTOR SEARCH ENHANCEMENTS ---
-  // 1024 dimensions for Mistral-embed model (CORRECTED from 1536)
+  // 1024 dimensions for Mistral-embed model
   embedding: {
     type: [Number], 
     required: false,
     index: false // Atlas Vector Index defined in UI
   },
-  // Victor optimization: short summary for token efficiency
-  summary: { type: String },
-  // -----------------------------------
   
-  // Mistral/OpenAI toolCalls format
+  // Mistral format
   toolCalls: [{
     id: { type: String, required: true },
     type: { type: String, default: "function" },
@@ -194,7 +190,6 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
         session: session._id,
         role: msg.role,
         content: msg.content || "",
-        // Accept camelCase format
         toolCalls: (msg.toolCalls && msg.toolCalls.length > 0) ? msg.toolCalls : undefined,
         toolCallId: msg.toolCallId || undefined,
         metadata: {
@@ -207,8 +202,14 @@ messageSchema.statics.saveMessages = async function(sessionId, newMessages) {
     
     if (messageDocs.length > 0) {
       await this.insertMany(messageDocs);
+
+      // Increment the messageCount in the Session schema
+      await mongoose.model('Session').findByIdAndUpdate(
+        session._id,
+        { $inc: { messageCount: messageDocs.length } }
+      );
     }
-    
+
     return true;
   } catch (error) {
     console.error('Error saving messages:', error);
@@ -223,6 +224,13 @@ messageSchema.statics.clearHistory = async function(sessionId) {
     if (!session) return false;
     
     await this.deleteMany({ session: session._id });
+
+    // Reset the messageCount in the Session schema
+    await mongoose.model('Session').findByIdAndUpdate(
+      session._id,
+      { $set: { messageCount: 0 } }
+    );
+
     return true;
   } catch (error) {
     console.error('Error clearing message history:', error);

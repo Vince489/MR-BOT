@@ -8,18 +8,19 @@ const sessionSchema = new Schema({
   sessionId: { type: String, required: true, unique: true, index: true },
   user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   lastActivity: { type: Date, default: Date.now },
-  
+  messageCount: { type: Number, default: 0 }, // Track the number of messages in this session
+
   // --- SEMANTIC EXPLORATION FIELDS ---
   topic: { type: String, trim: true }, // e.g., "Fixing MongoDB Retry Logic"
   summary: { type: String },         // Paragraph summarizing the whole session
   sessionEmbedding: { type: [Number] }, // 1024 dimensions for Mistral-embed model
-  category: { 
-    type: String, 
+  category: {
+    type: String,
     enum: ['technical', 'general', 'triage'],
     default: 'general'
   }, // Enhanced categorization for better search
   // -----------------------------------
-  
+
   modelConfig: {
     model: { type: String, default: "mistral-medium-2505" },
     contextLimit: { type: Number, default: 131072 }

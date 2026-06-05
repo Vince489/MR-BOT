@@ -1,0 +1,138 @@
+[{
+  "_id": {
+    "$oid": "69fb4f78e077ac6a2bbb314a"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "user",
+  "content": "hello",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:00.370Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:00.370Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4f7ae077ac6a2bbb314b"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "assistant",
+  "content": "Hello sir, how can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:02.100Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:02.100Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4f8fe077ac6a2bbb314c"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "user",
+  "content": "pls open google.com",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:23.721Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:23.721Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4f90e077ac6a2bbb314d"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "assistant",
+  "content": "",
+  "toolCalls": [
+    {
+      "id": "nbxNTMJrL",
+      "type": "function",
+      "function": {
+        "name": "browserTool",
+        "arguments": "{\"target\": \"https://google.com\"}"
+      }
+    }
+  ],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:24.743Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:24.743Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4f90e077ac6a2bbb314e"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "tool",
+  "content": "{\"success\":true,\"message\":\"Opened https://google.com in the default browser.\"}",
+  "toolCalls": [],
+  "toolCallId": "nbxNTMJrL",
+  "createdAt": {
+    "$date": "2026-05-06T14:26:24.838Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:24.838Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4f91e077ac6a2bbb314f"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "assistant",
+  "content": "The website is now open in your default browser.",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:25.574Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:25.574Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4fa9e077ac6a2bbb3150"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "user",
+  "content": "thx who are you again",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:49.796Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:49.796Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fb4fabe077ac6a2bbb3151"
+  },
+  "sessionId": "session_1778077501006_suuchbcqc",
+  "role": "assistant",
+  "content": "I'm VARJIS, your sophisticated and quick-witted AI assistant, designed to provide you with information and support, sir. How else can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-06T14:26:51.412Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-06T14:26:51.412Z"
+  },
+  "__v": 0
+}]

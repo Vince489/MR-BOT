@@ -1,0 +1,180 @@
+[{
+  "_id": {
+    "$oid": "69fa0a45190fc44436dab783"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "user",
+  "content": "hello",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:18:29.921Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:18:29.921Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a46190fc44436dab784"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "assistant",
+  "content": "Hello! How can I assist you today?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:18:30.650Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:18:30.650Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a50190fc44436dab785"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "user",
+  "content": "open ray.com",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:18:40.849Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:18:40.849Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a51190fc44436dab786"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "assistant",
+  "content": "",
+  "toolCalls": [
+    {
+      "id": "pBFa3KVPg",
+      "type": "function",
+      "function": {
+        "name": "browserTool",
+        "arguments": "{\"target\": \"ray.com\"}"
+      }
+    }
+  ],
+  "createdAt": {
+    "$date": "2026-05-05T15:18:41.906Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:18:41.906Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a51190fc44436dab787"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "tool",
+  "content": "{\"success\":true,\"message\":\"Opened ray.com in the default browser.\"}",
+  "toolCalls": [],
+  "toolCallId": "pBFa3KVPg",
+  "createdAt": {
+    "$date": "2026-05-05T15:18:41.920Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:18:41.920Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a85190fc44436dab788"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "user",
+  "content": "thanks now open www.google.com",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:19:33.749Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:19:33.749Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a86190fc44436dab789"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "assistant",
+  "content": "",
+  "toolCalls": [
+    {
+      "id": "onBUxhMNF",
+      "type": "function",
+      "function": {
+        "name": "browserTool",
+        "arguments": "{\"target\": \"https://www.google.com\"}"
+      }
+    }
+  ],
+  "createdAt": {
+    "$date": "2026-05-05T15:19:34.500Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:19:34.500Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0a86190fc44436dab78a"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "tool",
+  "content": "{\"success\":true,\"message\":\"Opened https://www.google.com in the default browser.\"}",
+  "toolCalls": [],
+  "toolCallId": "onBUxhMNF",
+  "createdAt": {
+    "$date": "2026-05-05T15:19:34.524Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:19:34.524Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0bb1190fc44436dab78b"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "user",
+  "content": "you are good at this",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:24:33.384Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:24:33.384Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "69fa0bb3190fc44436dab78c"
+  },
+  "sessionId": "session_1777994295985_8inqh4qif",
+  "role": "assistant",
+  "content": "Thank you! I'm here to help. Is there anything else you need assistance with?",
+  "toolCalls": [],
+  "createdAt": {
+    "$date": "2026-05-05T15:24:35.021Z"
+  },
+  "updatedAt": {
+    "$date": "2026-05-05T15:24:35.021Z"
+  },
+  "__v": 0
+}]

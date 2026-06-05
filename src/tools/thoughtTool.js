@@ -24,18 +24,19 @@ export const thoughtTool = {
     parameters: {
       type: "object",
       properties: {
-        step: {
-          type: "string",
-          description: "The current reasoning step.",
-          enum: [
-            "Pre-tool reasoning",
-            "Post-tool analysis", 
-            "Final decision",
-            "Error handling",
-            "Plan adjustment",
-            "Context evaluation"
-          ]
-        },
+         step: {
+           type: "string",
+           description: "The current reasoning step. Valid values: 'Pre-tool reasoning', 'Post-tool analysis', 'Final decision', 'Error handling', 'Plan adjustment', 'Context evaluation', 'Progress tracking'.",
+           enum: [
+             "Pre-tool reasoning",
+             "Post-tool analysis",
+             "Final decision",
+             "Error handling",
+             "Plan adjustment",
+             "Context evaluation",
+             "Progress tracking"
+           ]
+         },
         hypothesis: {
           type: "string",
           description: "Agent's hypothesis about the user's goal or the problem being solved."
